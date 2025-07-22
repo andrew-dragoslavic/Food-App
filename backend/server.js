@@ -3,6 +3,9 @@ const cors = require("cors")
 const dotenv = require("dotenv")
 const connectDB = require("./database.js")
 const authRoutes = require('./auth.js')
+const speechRoutes = require("./speechRoutes.js")
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express()
 dotenv.config()
@@ -13,6 +16,7 @@ async function startServer() {
     await connectDB('food-app')
 
     app.use('/api/auth', authRoutes)
+    app.use("/api/speech", upload.single('audio'), speechRoutes)
 
     app.get("/api/test", (req, res) => {
         res.json({
