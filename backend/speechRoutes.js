@@ -1,5 +1,6 @@
 const express = require('express');
 const speech = require('@google-cloud/speech')
+const { parseOrderText } = require('./aiService.js');
 
 const router = express.Router();
 const client = new speech.SpeechClient({
@@ -38,9 +39,11 @@ router.post('/transcribe', async (req, res) => {
     const transcription = response.results
       .map(result => result.alternatives[0].transcript)
       .join('\n');
+    
+    const parsedOrder = await parseOrderText(transcription);
 
     // Send back the text
-    res.json({ text: transcription });
+    res.json({ text: transcription, order: parsedOrder });
     
   } catch (error) {
     console.error('Speech processing error:', error);

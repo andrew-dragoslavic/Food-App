@@ -13,6 +13,7 @@ function App() {
   const [audioBlob, setAudioBlob] = useState(null);
   const [voiceError, setVoiceError] = useState('');
   const [transcript, setTranscript] = useState('');
+  const [parsedOrder, setParsedOrder] = useState(null);
 
   useEffect(() => {
     const change = onAuthStateChanged(auth, (currentUser) => {
@@ -33,6 +34,11 @@ function App() {
   };
 
   const startRecording = async () => {
+    // Clear previous results for a better user experience
+    setTranscript('');
+    setParsedOrder(null);
+    setVoiceError('');
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
@@ -52,7 +58,7 @@ function App() {
       setMediaRecorder(recorder);
       setIsRecording(true);
     } catch (error) {
-      setVoiceError('Speech processing failed');
+      setVoiceError('Could not access microphone. Please check permissions.');
     }
   };
 
@@ -75,6 +81,7 @@ function App() {
 
       const result = await response.json()
       setTranscript(result.text);
+      setParsedOrder(result.order);
     } catch (error) {
       setVoiceError("Speech processing failed");
     }
@@ -98,7 +105,7 @@ function App() {
         <Heading color="blue.600" size="lg">Voice Food Ordering</Heading>
           <Text fontSize="lg">Welcome, {user.email}!</Text>
           
-          <Box w="full" p={4} bg="white" rounded="lg" shadow="md">
+          <Box w="full" p={6} bg="white" rounded="lg" shadow="md">
               <VStack spacing={4}>
                 <Heading size="md">Voice Commands</Heading>
                 <Button 
@@ -110,20 +117,46 @@ function App() {
                 </Button>
               <Text color="gray.600">Click the button and say your food order</Text>
               
-                  {transcript && (
-                    <Box p={3} bg="gray.100" rounded="md" w="full">
-                      <Text fontWeight="bold" fontSize="sm" color="gray.600">You said:</Text>
-                      <Text>{transcript}</Text>
-                    </Box>
-                  )}
+                {transcript && (
+                  <Box p={3} bg="gray.100" rounded="md" w="full">
+                    <Text fontWeight="bold" fontSize="sm" color="gray.600">You said:</Text>
+                    <Text>{transcript}</Text>
+                  </Box>
+                )}
+                
+                {/* --- UPDATED DISPLAY LOGIC --- */}
+                {parsedOrder && parsedOrder.restaurant && (
+                  <Box p={4} bg="blue.50" rounded="md" w="full">
+                    <VStack align="start" spacing={3}>
+                      <Heading size="sm" color="blue.700">Order Details</Heading>
+                      <Text>
+                        <Text as="span" fontWeight="bold">Restaurant:</Text> {parsedOrder.restaurant}
+                      </Text>
+                      <VStack align="start" spacing={2} w="full">
+                        <Text fontWeight="bold">Items:</Text>
+                        {parsedOrder.items && parsedOrder.items.length > 0 ? (
+                          parsedOrder.items.map((orderItem, index) => (
+                            <Box key={index} pl={3} pt={2} pb={2} bg="white" rounded="md" w="full" shadow="sm">
+                              <Text>
+                                <Text as="span" fontWeight="600">{orderItem.quantity}x</Text> {orderItem.item}
+                              </Text>
+                            </Box>
+                          ))
+                        ) : (
+                          <Text fontSize="sm" color="gray.600">No items were parsed from your order.</Text>
+                        )}
+                      </VStack>
+                    </VStack>
+                  </Box>
+                )}
 
-                  {voiceError && (
-                    <Text color="red.500" fontSize="sm">{voiceError}</Text>
-                  )}
+                {voiceError && (
+                  <Text color="red.500" fontSize="sm">{voiceError}</Text>
+                )}
               </VStack>
           </Box>
           
-        <Button colorScheme="red" onClick={handleLogout}>
+        <Button colorScheme="gray" onClick={handleLogout}>
           Logout
         </Button>
       </VStack>
