@@ -8,6 +8,11 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [voiceError, setVoiceError] = useState('');
+  const [transcript, setTranscript] = useState('');
 
   useEffect(() => {
     const change = onAuthStateChanged(auth, (currentUser) => {
@@ -24,6 +29,54 @@ function App() {
       console.log("Logged out successfully!");
     } catch (error) {
       console.error("Logout error:", error);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+
+      const audioChunks = [];
+      recorder.ondataavailable = (event) => {
+        audioChunks.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        const newAudioBlob = new Blob(audioChunks, { type: "audio/wav" });
+        setAudioBlob(newAudioBlob);
+        processAudio(newAudioBlob);
+      };
+      
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+    } catch (error) {
+      setVoiceError('Speech processing failed');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const processAudio = async (audioBlob) => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob);
+
+    try {
+      const response = await fetch('/api/speech/transcribe', {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await response.json()
+      setTranscript(result.text);
+    } catch (error) {
+      setVoiceError("Speech processing failed");
     }
   };
 
@@ -48,10 +101,25 @@ function App() {
           <Box w="full" p={4} bg="white" rounded="lg" shadow="md">
               <VStack spacing={4}>
                 <Heading size="md">Voice Commands</Heading>
-                <Button colorScheme="green" size="lg">
-                  🎤 Record Command
+                <Button 
+                  colorScheme={isRecording ? "red" : "green"}
+                  size="lg"
+                  onClick={isRecording ? stopRecording : startRecording}
+                >
+                  {isRecording ? "🔴 Stop Recording" : "🎤 Record Command"}
                 </Button>
-                <Text color="gray.600">Click the button and say your food order</Text>
+              <Text color="gray.600">Click the button and say your food order</Text>
+              
+                  {transcript && (
+                    <Box p={3} bg="gray.100" rounded="md" w="full">
+                      <Text fontWeight="bold" fontSize="sm" color="gray.600">You said:</Text>
+                      <Text>{transcript}</Text>
+                    </Box>
+                  )}
+
+                  {voiceError && (
+                    <Text color="red.500" fontSize="sm">{voiceError}</Text>
+                  )}
               </VStack>
           </Box>
           
