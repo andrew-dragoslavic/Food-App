@@ -1,5 +1,6 @@
 let browser;
 let page;
+const { createReadStream } = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 
@@ -15,7 +16,7 @@ const yourPassword = process.env.DOORDASH_PASSWORD;
 
 async function initialize() {
   browser = await puppeteer.launch({
-    headless: true,
+    headless: false,
     args: ["--no-sandbox", "disable-setuid-sandbox"],
   });
 
@@ -108,7 +109,7 @@ function getDoorDashPage() {
 }
 
 async function searchForRestaurant(name) {
-  page = getDoorDashPage();
+  const page = getDoorDashPage();
   const searchSelector = 'input[placeholder="Search DoorDash"]';
   await page.waitForSelector(searchSelector, {
     visible: true,
@@ -116,8 +117,81 @@ async function searchForRestaurant(name) {
   });
   await page.type(searchSelector, name, { delay: 100 });
   await page.keyboard.press("Enter");
-  page.waitForNavigation({ waitUntil: "networkidle2" });
-  return { success: true };
+
+  try {
+    console.log("Waiting for the first batch of restaurants to load...");
+    await page.waitForSelector('[data-telemetry-id="store.name"]', {
+      timeout: 20000,
+    });
+    console.log(
+      "Initial restaurants loaded. Now scrolling to load all results..."
+    );
+  } catch (error) {
+    console.log(
+      "Could not find any restaurants. Page might be blank or require login."
+    );
+    await page.screenshot({ path: "doordash_final_error.png" });
+    return { success: false, data: [] };
+  }
+
+  // --- NEW: SCROLLING LOGIC TO HANDLE LAZY LOADING ---
+  let previousHeight;
+  for (let i = 0; i < 5; i++) {
+    // Scroll a maximum of 5 times
+    previousHeight = await page.evaluate("document.body.scrollHeight");
+    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
+    // Wait for new content to load. A fixed wait is often easiest here.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    let newHeight = await page.evaluate("document.body.scrollHeight");
+    if (newHeight === previousHeight) {
+      break; // If the page height hasn't changed, we've reached the bottom.
+    }
+  }
+
+  console.log("Finished scrolling. Beginning final scrape...");
+
+  // --- DEFINITIVE SCRAPING LOGIC WITH CORRECTED SCOPE ---
+  const restaurantData = await page.$$eval(
+    '[data-telemetry-id="store.name"]', // Start with the reliable store names
+    (nameElements) => {
+      return nameElements.map((nameEl) => {
+        // --- THE KEY FIX FOR NULL VALUES ---
+        // From the name, travel up to the container with an ID that starts with "store-info-".
+        const cardContainer = nameEl.closest('div[id^="store-info-"]');
+        if (!cardContainer) return null;
+
+        const name = nameEl.innerText;
+        const allSpans = Array.from(cardContainer.querySelectorAll("span"));
+        const allTextContent = allSpans
+          .map((span) => span.innerText.trim())
+          .filter((text) => text);
+
+        let rating = null;
+        let reviews = null;
+        let distance = null;
+        let deliveryTime = null;
+
+        const ratingLine = allTextContent.find((text) => /^\d\.\d/.test(text));
+        if (ratingLine) {
+          rating = parseFloat(ratingLine) || null;
+          const reviewMatch = ratingLine.match(/\(([^)]+)\)/);
+          reviews = reviewMatch ? reviewMatch[1] : null;
+        }
+
+        distance = allTextContent.find((text) => text.includes("mi")) || null;
+        deliveryTime =
+          allTextContent.find((text) => text.includes("min")) || null;
+
+        return { name, rating, reviews, distance, deliveryTime };
+      });
+    }
+  );
+
+  const finalData = restaurantData.filter((item) => item !== null);
+
+  console.log(`Successfully scraped ${finalData.length} total restaurants.`);
+  console.log(finalData);
+  return { success: true, data: finalData };
 }
 
 module.exports = {
