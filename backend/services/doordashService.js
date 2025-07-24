@@ -234,8 +234,110 @@ async function findAndSelectRestaurant(name) {
   }
 }
 
+async function findAndAddFoodItem(item) {
+  const page = getDoorDashPage();
+
+  await page
+    .waitForNavigation({ waitUntil: "networkidle2", timeout: 10000 })
+    .catch(() => {
+      console.log("Naviagtion complete, continuing...");
+    });
+
+  const menuItems = await scrapeMenuItems(page);
+}
+
+async function scrapeMenuItems(page) {
+  await page.evaluate(() => {
+    return new Promise((resolve) => {
+      let totalHeight = 0;
+      const timer = setInterval(() => {
+        const scrollHeight = document.body.scrollHeight;
+        window.scrollBy(0, 300);
+        totalHeight += 300;
+
+        if (totalHeight >= scrollHeight || totalHeight > 5000) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 100);
+    });
+  });
+
+  const menuItems = await page.evaluate(() => {
+    const items = [];
+
+    const menuItemContainers = document.querySelectorAll(
+      '[data-anchor-id="MenuItem"], [data-testid="MenuItem"]'
+    );
+
+    menuItemContainers.forEach((container, index) => {
+      try {
+        const nameEl = container.querySelector(
+          'h3[data-telemetry-id="storeMenuItem.title"]'
+        );
+        const name = nameEl ? nameEl.innerText.trim() : null;
+
+        const priceEl = container.querySelector(
+          '[data-testid="StoreMenuItemPrice"]'
+        );
+        const price = priceEl ? priceEl.innerText.trim() : null;
+
+        const descEl = container.querySelector(
+          '[data-telemetry-id="storeMenuItem.subtitle"]'
+        );
+        const desc = descEl ? descEl.innerText.trim() : null;
+
+        const itemId = container.getAttribute("data-item-id");
+
+        if (name && name.length > 0) {
+          items.push({
+            name,
+            price,
+            desc,
+            itemId,
+            index,
+            selector: `[data-item-id="${itemId}"]`,
+          });
+        }
+      } catch (error) {
+        console.log(`Error extracting item ${index}:`, error);
+      }
+    });
+    return items;
+  });
+  console.log(`Scraped ${menuItems.length} menu items`);
+
+  // Log first few items for debugging
+  menuItems.slice(0, 3).forEach((item) => {
+    console.log(
+      `- ${item.name} (${item.price}): ${item.description.substring(0, 50)}...`
+    );
+  });
+
+  return menuItems;
+}
+
+async function testMenuScraping() {
+  const page = getDoorDashPage(); // Your existing page
+  
+  console.log("Testing menu scraping...");
+  const menuItems = await scrapeMenuItems(page);
+  
+  console.log(`\nFound ${menuItems.length} menu items:`);
+  
+  // Print first 5 items
+  menuItems.slice(0, 5).forEach((item, index) => {
+    console.log(`${index + 1}. ${item.name} - ${item.price}`);
+    console.log(`   ${item.description.substring(0, 60)}...`);
+    console.log("");
+  });
+}
+
+
 module.exports = {
   initialize,
   getDoorDashPage,
   findAndSelectRestaurant,
+  scrapeMenuItems,
+  testMenuScraping,
 };
