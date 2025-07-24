@@ -1,7 +1,7 @@
 const express = require("express");
 const speech = require("@google-cloud/speech");
 const { parseOrderText } = require("./aiService.js");
-const { searchForRestaurant } = require("./services/doordashService.js");
+const { findAndSelectRestaurant } = require("./services/doordashService.js");
 
 const router = express.Router();
 const client = new speech.SpeechClient({
@@ -42,8 +42,7 @@ router.post("/transcribe", async (req, res) => {
       .join("\n");
 
     const parsedOrder = await parseOrderText(transcription);
-    const searchResult = await searchForRestaurant(parsedOrder.restaurant);
-    console.log(searchResult);
+    await findAndSelectRestaurant(parsedOrder.restaurant);
 
     // Send back the text
     res.json({ text: transcription, order: parsedOrder });

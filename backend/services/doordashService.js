@@ -24,6 +24,9 @@ async function initialize() {
   await page.setUserAgent(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
   );
+  //   await page.on("console", (msg) => {
+  //     console.log(`BROWSER LOG: ${msg.text()}`);
+  //   });
 
   await page.setViewport({
     width: 1920,
@@ -108,94 +111,131 @@ function getDoorDashPage() {
   }
 }
 
-async function searchForRestaurant(name) {
+async function findAndSelectRestaurant(name) {
   const page = getDoorDashPage();
   const searchSelector = 'input[placeholder="Search DoorDash"]';
-  await page.waitForSelector(searchSelector, {
-    visible: true,
-    timeout: 200000,
-  });
+
+  console.log(`Searching for: ${name}`);
+  await page.waitForSelector(searchSelector, { visible: true });
+
+  // Clear the input field before typing
+  await page.evaluate((selector) => {
+    const input = document.querySelector(selector);
+    if (input) input.value = "";
+  }, searchSelector);
+
   await page.type(searchSelector, name, { delay: 100 });
   await page.keyboard.press("Enter");
 
-  try {
-    console.log("Waiting for the first batch of restaurants to load...");
-    await page.waitForSelector('[data-telemetry-id="store.name"]', {
-      timeout: 20000,
+  console.log("Waiting for search results to load...");
+  await page
+    .waitForNavigation({ waitUntil: "networkidle2", timeout: 10000 })
+    .catch(() => {
+      console.log("Navigation did not complete, but continuing to scrape.");
     });
-    console.log(
-      "Initial restaurants loaded. Now scrolling to load all results..."
-    );
+
+  // Wait for at least one store name to be present
+  const storeNameSelector = '[data-telemetry-id="store.name"]';
+  try {
+    await page.waitForSelector(storeNameSelector, { timeout: 10000 });
   } catch (error) {
-    console.log(
-      "Could not find any restaurants. Page might be blank or require login."
-    );
-    await page.screenshot({ path: "doordash_final_error.png" });
-    return { success: false, data: [] };
+    console.log("No restaurant names found after search.");
+    await page.screenshot({ path: "doordash_no_results.png" });
+    return { success: false, message: "No restaurants found." };
   }
 
-  // --- NEW: SCROLLING LOGIC TO HANDLE LAZY LOADING ---
+  // Scrolling logic to handle lazy loading
   let previousHeight;
   for (let i = 0; i < 5; i++) {
-    // Scroll a maximum of 5 times
     previousHeight = await page.evaluate("document.body.scrollHeight");
     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
-    // Wait for new content to load. A fixed wait is often easiest here.
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     let newHeight = await page.evaluate("document.body.scrollHeight");
     if (newHeight === previousHeight) {
-      break; // If the page height hasn't changed, we've reached the bottom.
+      break;
     }
   }
 
-  console.log("Finished scrolling. Beginning final scrape...");
+  console.log("Finished scrolling. Finding the best match...");
 
-  // --- DEFINITIVE SCRAPING LOGIC WITH CORRECTED SCOPE ---
-  const restaurantData = await page.$$eval(
-    '[data-telemetry-id="store.name"]', // Start with the reliable store names
-    (nameElements) => {
-      return nameElements.map((nameEl) => {
-        // --- THE KEY FIX FOR NULL VALUES ---
-        // From the name, travel up to the container with an ID that starts with "store-info-".
-        const cardContainer = nameEl.closest('div[id^="store-info-"]');
-        if (!cardContainer) return null;
+  // --- FINALIZED LOGIC: Your selection + robust parsing ---
+  const bestMatchIndex = await page.$$eval(
+    storeNameSelector, // Start with your reliable store name selector
+    (nameElements, restaurantName) => {
+      // First, scrape the data from all cards
+      const scrapedData = nameElements
+        .map((nameEl) => {
+          // Use your successful method to find the parent container
+          const cardContainer = nameEl.closest('div[id^="store-info-"]');
+          console.log(cardContainer);
+          if (!cardContainer) return null;
 
-        const name = nameEl.innerText;
-        const allSpans = Array.from(cardContainer.querySelectorAll("span"));
-        const allTextContent = allSpans
-          .map((span) => span.innerText.trim())
-          .filter((text) => text);
+          const name = nameEl.innerText;
+          console.log(name);
+          const cardText = cardContainer.innerText;
+          let status = cardText.includes("Closed") ? "Closed" : "Open";
 
-        let rating = null;
-        let reviews = null;
-        let distance = null;
-        let deliveryTime = null;
+          return { name, status };
+        })
+        .filter((item) => item && item.name); // Filter out any nulls or items without a name
 
-        const ratingLine = allTextContent.find((text) => /^\d\.\d/.test(text));
-        if (ratingLine) {
-          rating = parseFloat(ratingLine) || null;
-          const reviewMatch = ratingLine.match(/\(([^)]+)\)/);
-          reviews = reviewMatch ? reviewMatch[1] : null;
-        }
+      // Now, find the index of the first open restaurant that matches the name
+      const index = scrapedData.findIndex(
+        (restaurant) =>
+          restaurant.status === "Open" &&
+          restaurant.name.toLowerCase().includes(restaurantName.toLowerCase())
+      );
 
-        distance = allTextContent.find((text) => text.includes("mi")) || null;
-        deliveryTime =
-          allTextContent.find((text) => text.includes("min")) || null;
-
-        return { name, rating, reviews, distance, deliveryTime };
-      });
-    }
+      return index; // This is the only thing we return
+    },
+    name // Pass the user's search term into the browser
   );
 
-  const finalData = restaurantData.filter((item) => item !== null);
+  if (bestMatchIndex === -1) {
+    console.log(`No open restaurant matching "${name}" was found.`);
+    return {
+      success: false,
+      message: "No open restaurant found with that name.",
+    };
+  }
 
-  console.log(`Successfully scraped ${finalData.length} total restaurants.`);
-  console.log(finalData);
-  return { success: true, data: finalData };
+  console.log(
+    `Best match found at index: ${bestMatchIndex}. Clicking it now...`
+  );
+
+  // Get all the clickable card elements again, this time using the name selector as the base
+  const allRestaurantNameElements = await page.$$(storeNameSelector);
+  //   console.log(allRestaurantNameElements);
+  const targetNameElement = allRestaurantNameElements[bestMatchIndex];
+
+  if (targetNameElement) {
+    // The span is inside an A tag, let's get that A tag
+    const parentLink = await targetNameElement.evaluateHandle((el) =>
+      el.closest("a")
+    );
+
+    const linkElement = parentLink.asElement();
+    console.log("Found parent link:", linkElement);
+
+    if (linkElement) {
+      // Check what this link contains
+      const linkInfo = await linkElement.evaluate((el) => ({
+        href: el.href,
+        className: el.className,
+        dataAnchorId: el.getAttribute("data-anchor-id"),
+        outerHTML: el.outerHTML.substring(0, 300),
+      }));
+      console.log("Link info:", linkInfo);
+
+      // Click this link instead
+      await linkElement.click();
+      console.log("Clicked the restaurant link");
+    }
+  }
 }
 
 module.exports = {
   initialize,
   getDoorDashPage,
-  searchForRestaurant,
+  findAndSelectRestaurant,
 };
