@@ -291,7 +291,7 @@ async function captureMenuItemsDuringScroll(restaurantPage) {
   await new Promise((resolve) => setTimeout(resolve, 4000));
 
   const allMenuItems = new Map();
-  const scrollIncrement = 200;
+  const scrollIncrement = 400;
   let lastScrollPosition = 0;
   let noMovementCount = 0;
   let noNewItemsCount = 0;
@@ -303,12 +303,12 @@ async function captureMenuItemsDuringScroll(restaurantPage) {
       () => window.scrollY
     );
 
-    console.log(
-      `\n--- SCROLL ATTEMPT ${scrollAttempt} (position: ${currentScrollPosition}px) ---`
-    );
+    // console.log(
+    //   `\n--- SCROLL ATTEMPT ${scrollAttempt} (position: ${currentScrollPosition}px) ---`
+    // );
 
     // Wait for lazy loading
-    await new Promise((resolve) => setTimeout(resolve, 4000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // First, test different selectors to see what's available
     const selectorTests = await restaurantPage.evaluate(() => {
@@ -332,52 +332,23 @@ async function captureMenuItemsDuringScroll(restaurantPage) {
     const debugResults = await restaurantPage.$$eval(
       '[data-testid="MenuItem"]',
       (elements) => {
-        console.log("=== INSIDE $$EVAL DEBUG ===");
-        console.log("Raw elements found:", elements.length);
+        // console.log("=== INSIDE $$EVAL DEBUG ===");
+        // console.log("Raw elements found:", elements.length);
 
         if (elements.length > 0) {
           const firstEl = elements[0];
-          console.log("First element details:");
-          console.log("  tagName:", firstEl.tagName);
-          console.log("  data-testid:", firstEl.getAttribute("data-testid"));
-          console.log(
-            "  data-anchor-id:",
-            firstEl.getAttribute("data-anchor-id")
-          );
-          console.log("  data-item-id:", firstEl.getAttribute("data-item-id"));
-          console.log("  className:", firstEl.className);
-          console.log(
-            "  innerHTML preview:",
-            firstEl.innerHTML.substring(0, 200)
-          );
 
-          // Check for aria-label in children
           const ariaLabelEl = firstEl.querySelector("[aria-label]");
-          console.log("  aria-label element found:", !!ariaLabelEl);
-          if (ariaLabelEl) {
-            console.log(
-              "  aria-label value:",
-              ariaLabelEl.getAttribute("aria-label")
-            );
-          }
 
           // Check for title element
           const titleEl = firstEl.querySelector(
             '[data-telemetry-id="storeMenuItem.title"]'
           );
-          console.log("  title element found:", !!titleEl);
-          if (titleEl) {
-            console.log("  title text:", titleEl.innerText);
-          }
 
           // Check for price element
           const priceEl = firstEl.querySelector(
             '[data-testid="StoreMenuItemPrice"]'
           );
-          console.log("  price element found:", !!priceEl);
-          if (priceEl) {
-            console.log("  price text:", priceEl.innerText);
-          }
         }
 
         return {
@@ -400,7 +371,7 @@ async function captureMenuItemsDuringScroll(restaurantPage) {
       }
     );
 
-    console.log("🔍 $$EVAL DEBUG RESULTS:", debugResults);
+    // console.log("🔍 $$EVAL DEBUG RESULTS:", debugResults);
 
     // Add the quick extraction test
     if (debugResults.elementsFound > 0) {
@@ -506,14 +477,14 @@ async function captureMenuItemsDuringScroll(restaurantPage) {
     }
 
     // Take a screenshot every 5 attempts for debugging
-    if (scrollAttempt % 5 === 0) {
-      await restaurantPage.screenshot({
-        path: `debug-scroll-${scrollAttempt}.png`,
-      });
-      console.log(
-        `📸 Debug screenshot saved: debug-scroll-${scrollAttempt}.png`
-      );
-    }
+    // if (scrollAttempt % 5 === 0) {
+    //   await restaurantPage.screenshot({
+    //     path: `debug-scroll-${scrollAttempt}.png`,
+    //   });
+    //   console.log(
+    //     `📸 Debug screenshot saved: debug-scroll-${scrollAttempt}.png`
+    //   );
+    // }
 
     // Scroll down
     await restaurantPage.evaluate((scrollAmount) => {
@@ -580,56 +551,6 @@ async function captureMenuItemsDuringScroll(restaurantPage) {
   );
 
   return finalUniqueItems;
-}
-
-async function testMenuScraping() {
-  console.log("=== STARTING RESTAURANT SELECTION ===");
-
-  const restaurantResult = await findAndSelectRestaurant("McDonald's");
-
-  if (!restaurantResult.success) {
-    console.log("❌ Failed to select restaurant:", restaurantResult.message);
-    return;
-  }
-
-  console.log("✅ Restaurant selection successful");
-  const restaurantPage = restaurantResult.newPage;
-
-  await restaurantPage.screenshot({ path: "restaurant-page-initial.png" });
-  console.log("📸 Initial screenshot saved");
-
-  console.log("⏳ Waiting for page to fully load...");
-  await new Promise((resolve) => setTimeout(resolve, 8000));
-
-  // Check initial state
-  const initialCheck = await restaurantPage.evaluate(() => {
-    return {
-      url: window.location.href,
-      title: document.title,
-      menuItems: document.querySelectorAll('[data-testid="MenuItem"]').length,
-      allTestIds: Array.from(document.querySelectorAll("[data-testid]")).length,
-      pageHeight: document.body.scrollHeight,
-    };
-  });
-
-  console.log("📊 INITIAL STATE:", initialCheck);
-
-  console.log("\n=== STARTING MENU SCRAPING ===");
-  const menuItems = await captureMenuItemsDuringScroll(restaurantPage);
-
-  if (menuItems && menuItems.length > 0) {
-    console.log(`\n🎉 SUCCESS! Captured ${menuItems.length} menu items:`);
-
-    menuItems.sort((a, b) => a.name.localeCompare(b.name));
-    menuItems.forEach((item, index) => {
-      console.log(`${index + 1}. "${item.name}" - ${item.price}`);
-    });
-  } else {
-    console.log("\n❌ No menu items captured - check debug screenshots");
-  }
-
-  await restaurantPage.screenshot({ path: "restaurant-page-final.png" });
-  return menuItems;
 }
 
 async function testMenuScraping() {
