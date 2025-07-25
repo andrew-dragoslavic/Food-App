@@ -2,3 +2,4 @@
 /backend/.env
 /backend/speech.json
 /backend/vertex.json
+*.png
