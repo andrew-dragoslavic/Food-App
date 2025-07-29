@@ -53,7 +53,11 @@ router.post("/transcribe", async (req, res) => {
     // console.log(prediction);
 
     // Send back the text
-    res.json({ text: transcription, order: parsedOrder });
+    res.json({
+      text: transcription,
+      order: parsedOrder,
+      prediction: prediction,
+    });
   } catch (error) {
     console.error("Speech processing error:", error);
     res
