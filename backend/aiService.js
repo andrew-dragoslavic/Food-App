@@ -90,35 +90,93 @@ async function parseOrderText(text) {
   }
 }
 
-async function resolveMenuItems(parsedOrder, menuItems) {
+async function resolveMenuItems(
+  parsedOrder,
+  menuItems,
+  previousPrediction = null
+) {
   try {
-    console.log("Resolving menu items for:", JSON.stringify(parsedOrder));
-    const prompt = `
-You are a food ordering assistant that matches customer requests to exact menu items. Your goal is to be helpful but not presumptuous.
+    let prompt;
 
-CUSTOMER ORDER:
-${JSON.stringify(parsedOrder, null, 2)}
+    if (previousPrediction) {
+      // This is a clarification request
+      prompt = `
+    You are a food ordering assistant resolving clarifications for a previous order.
 
-AVAILABLE MENU:
-${menuItems
-  .map((item, index) => `${index + 1}. ${item.name} - ${item.price}`)
-  .join("\n")}
+    PREVIOUS ORDER STATE:
+    Confirmed items: ${JSON.stringify(
+      previousPrediction.confident_matches || [],
+      null,
+      2
+    )}
+    Items needing clarification: ${JSON.stringify(
+      previousPrediction.clarification_needed || [],
+      null,
+      2
+    )}
+    Items not found: ${JSON.stringify(
+      previousPrediction.not_found || [],
+      null,
+      2
+    )}
 
-MATCHING PRINCIPLES:
-- Only be confident when there's one clear, obvious match
-- When in doubt, ask for clarification rather than assuming
-- If multiple similar items exist (individual vs meal, different flavors, etc.), always clarify
-- Ignore size descriptors if all options are the same price
-- Match common food terms intelligently (e.g., "nuggets" = "Chicken McNuggets")
+    CUSTOMER CLARIFICATION:
+    ${JSON.stringify(parsedOrder, null, 2)}
 
-CONFIDENCE RULES:
-- Confident: Customer says "Big Mac" and only one Big Mac exists
-- Clarification: Customer says "Big Mac" but both "Big Mac" and "Big Mac Meal" exist
-- Clarification: Customer says "Coke" but multiple Coke types exist
-- Not Found: Customer requests something not on the menu
+    AVAILABLE MENU:
+    ${menuItems
+      .map((item, index) => `${index + 1}. ${item.name} - ${item.price}`)
+      .join("\n")}
 
-Return matches in the specified JSON format, focusing on what the customer actually said vs what's available.
-`;
+    CLARIFICATION RESOLUTION RULES:
+    - Keep ALL confident_matches from the previous order unchanged
+    - For each item in clarification_needed, check if the customer's new input resolves it
+    - When customer specifies an exact menu item name and price, that resolves the clarification
+    - When customer says "X instead of Y" or "X not Y", choose X and move to confident_matches
+    - If customer mentions new items not in the original order, add them as new items
+    - Only keep items in clarification_needed if they are still truly unclear
+
+    SPECIFIC MATCHING:
+    - If customer provides specific price that matches a menu item, use that exact match
+    - Be aggressive about resolving clarifications when customer gives specific choices
+
+    Return the updated order state with resolved items moved to confident_matches.`;
+    } else {
+      // This is a new order - use your existing prompt
+      prompt = `
+        You are a food ordering assistant that matches customer requests to exact menu items...
+        CUSTOMER ORDER:
+        ${JSON.stringify(parsedOrder, null, 2)}
+
+        AVAILABLE MENU:
+        ${menuItems
+          .map((item, index) => `${index + 1}. ${item.name} - ${item.price}`)
+          .join("\n")}
+
+        MATCHING PRINCIPLES:
+        - Only be confident when there's one clear, obvious match
+        - When in doubt, ask for clarification rather than assuming
+        - If multiple similar items exist (individual vs meal, different flavors, etc.), always clarify
+        - EXCEPTION: If customer explicitly excludes an option, respect that exclusion
+        - Ignore size descriptors if all options are the same price
+        - Match common food terms intelligently
+
+        CONFIDENCE RULES:
+        - Confident: Customer requests item and only one match exists
+        - Confident: Customer says "item X not the meal" - match the individual item, not the meal
+        - Confident: Customer says "I want X not Y" - match X, exclude Y
+        - Clarification: Customer requests item but multiple similar items exist
+        - Clarification: Multiple options available without clear preference
+        - Not Found: Customer requests something not on the menu
+
+        EXCLUSION HANDLING:
+        - Look for words like "not", "not the", "don't want", "without", "exclude"
+        - When exclusions are present, remove excluded items from consideration
+        - Be confident in matches when exclusions clearly indicate preference
+        - If customer says "X not Y", confidently match X and exclude Y from consideration
+
+        Return matches in the specified JSON format, focusing on what the customer actually said vs what's available.`;
+    }
 
     const jsonSchema = {
       type: "object",
@@ -199,9 +257,9 @@ Return matches in the specified JSON format, focusing on what the customer actua
       ],
     };
 
-    console.log("Request:", JSON.stringify(request));
+    // console.log("Request:", JSON.stringify(request));
     const result = await generativeModel.generateContent(request);
-    console.log("Raw result:", JSON.stringify(result.response, null, 2));
+    // console.log("Raw result:", JSON.stringify(result.response, null, 2));
 
     const candidate = result.response.candidates[0];
     if (candidate && candidate.content && candidate.content.parts) {

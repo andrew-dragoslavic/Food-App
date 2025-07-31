@@ -5,11 +5,39 @@ const {
   findAndSelectRestaurant,
   testMenuScraping,
 } = require("./services/doordashService.js");
+const { clarificationService } = require("./services/clarificationService.js");
+const { v4: uuidv4 } = require("uuid");
 
 const router = express.Router();
 const client = new speech.SpeechClient({
   keyFilename: process.env.GOOGLE_SPEECH_CREDENTIALS,
 });
+
+const activeSessions = new Map();
+
+function createSession(sessionData) {
+  const uuid = uuidv4();
+  activeSessions.set(uuid, sessionData);
+  return uuid;
+}
+
+function getSession(sessionId) {
+  const sessionData = activeSessions.get(sessionId);
+  return sessionData;
+}
+
+function updateSession(sessionId, newData) {
+  const existing = getSession(sessionId);
+  if (existing) {
+    activeSessions.set(sessionId, { ...existing, ...newData });
+  }
+  return sessionId;
+}
+
+function deleteSession(sessionId) {
+  activeSessions.delete(sessionId);
+  return sessionId;
+}
 
 router.post("/transcribe", async (req, res) => {
   try {
@@ -17,6 +45,8 @@ router.post("/transcribe", async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "No audio file provided" });
     }
+
+    const sessionId = req.body.sessionId;
 
     // Get audio data from multer
     const audioBytes = req.file.buffer.toString("base64");
@@ -44,19 +74,104 @@ router.post("/transcribe", async (req, res) => {
       .map((result) => result.alternatives[0].transcript)
       .join("\n");
 
-    const parsedOrder = await parseOrderText(transcription);
-    // const resultFound = await findAndSelectRestaurant(parsedOrder.restaurant);
-    // console.log(resultFound);
+    let parsedOrder,
+      menuItems,
+      prediction,
+      clarificationResult,
+      responseSessionId;
 
-    const menuItems = await testMenuScraping();
-    const prediction = await resolveMenuItems(parsedOrder, menuItems);
-    // console.log(prediction);
+    if (sessionId) {
+      // Existing session - this is a clarification request
+      const session = getSession(sessionId);
+      if (session) {
+        // Combine the original order with the new clarification
 
-    // Send back the text
+        // Re-process with combined context
+        parsedOrder = await parseOrderText(transcription);
+        menuItems = session.menuItems; // Reuse stored menu items
+        prediction = await resolveMenuItems(
+          parsedOrder,
+          menuItems,
+          session.currentPrediction
+        );
+
+        // Check if we still need clarification
+        clarificationResult = clarificationService(prediction);
+
+        console.log("Original transcription:", transcription);
+        console.log("Session ID:", sessionId);
+        console.log("Clarification result:", clarificationResult);
+
+        if (clarificationResult.needed) {
+          // Still need clarification - update session
+          updateSession(sessionId, {
+            originalTranscription: transcription,
+            parsedOrder: parsedOrder,
+            currentPrediction: prediction,
+            attempts: (session.attempts || 1) + 1,
+            lastActivity: new Date(),
+          });
+          responseSessionId = sessionId;
+        } else {
+          // No more clarification needed - delete session and proceed with order
+          deleteSession(sessionId);
+          responseSessionId = null;
+          // TODO: Place the order here
+        }
+      } else {
+        // Session not found, treat as new request
+        parsedOrder = await parseOrderText(transcription);
+        menuItems = await testMenuScraping();
+        prediction = await resolveMenuItems(parsedOrder, menuItems);
+        clarificationResult = clarificationService(prediction);
+
+        if (clarificationResult.needed) {
+          responseSessionId = createSession({
+            createdAt: new Date(),
+            originalTranscription: transcription,
+            parsedOrder: parsedOrder,
+            menuItems: menuItems,
+            currentPrediction: prediction,
+            attempts: 1,
+          });
+        } else {
+          responseSessionId = null;
+        }
+      }
+    } else {
+      // New request - no session ID provided
+      parsedOrder = await parseOrderText(transcription);
+      menuItems = await testMenuScraping();
+      prediction = await resolveMenuItems(parsedOrder, menuItems);
+
+      // Check if clarification is needed
+      clarificationResult = clarificationService(prediction);
+
+      if (clarificationResult.needed) {
+        // Create new session
+        responseSessionId = createSession({
+          createdAt: new Date(),
+          originalTranscription: transcription,
+          parsedOrder: parsedOrder,
+          menuItems: menuItems,
+          currentPrediction: prediction,
+          attempts: 1,
+        });
+      } else {
+        // No clarification needed, proceed with order
+        responseSessionId = null;
+        // TODO: Place the order here
+      }
+    }
+
+    // Send response
     res.json({
       text: transcription,
       order: parsedOrder,
       prediction: prediction,
+      clarification: clarificationResult,
+      sessionId: responseSessionId,
+      needsClarification: clarificationResult.needed,
     });
   } catch (error) {
     console.error("Speech processing error:", error);

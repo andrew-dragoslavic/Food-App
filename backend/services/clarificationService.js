@@ -37,3 +37,5 @@ function clarificationService(prediction) {
     },
   };
 }
+
+module.exports = { clarificationService };
