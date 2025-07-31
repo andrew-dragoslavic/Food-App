@@ -28,6 +28,8 @@ function App() {
   const [parsedOrder, setParsedOrder] = useState(null);
   const [menuResolution, setMenuResolution] = useState(null);
   const [clarificationChoices, setClarificationChoices] = useState({});
+  const [sessionId, setSessionId] = useState(null);
+  const [needsClarification, setNeedsClarification] = useState(false);
 
   useEffect(() => {
     const change = onAuthStateChanged(auth, (currentUser) => {
@@ -50,11 +52,13 @@ function App() {
   const startRecording = async () => {
     // Clear previous results for a better user experience
     setTranscript("");
-    setParsedOrder(null);
-    setMenuResolution(null);
-    setClarificationChoices({});
     setVoiceError("");
 
+    if (!needsClarification) {
+      setParsedOrder(null);
+      setMenuResolution(null);
+      setClarificationChoices({});
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
@@ -89,6 +93,11 @@ function App() {
     const formData = new FormData();
     formData.append("audio", audioBlob);
 
+    // Include session ID if we have one (for clarification requests)
+    if (sessionId) {
+      formData.append("sessionId", sessionId);
+    }
+
     try {
       const response = await fetch("/api/speech/transcribe", {
         method: "POST",
@@ -97,9 +106,18 @@ function App() {
 
       const result = await response.json();
       setTranscript(result.text);
-      setParsedOrder(result.order);
 
-      // Set the menu resolution from prediction
+      // Handle session management
+      if (result.sessionId) {
+        setSessionId(result.sessionId);
+        setNeedsClarification(result.needsClarification);
+      } else {
+        setSessionId(null);
+        setNeedsClarification(false);
+      }
+
+      // Update the UI
+      setParsedOrder(result.order);
       if (result.prediction) {
         setMenuResolution(result.prediction);
       }
@@ -248,7 +266,7 @@ function App() {
                                   <Text as="span" fontWeight="600">
                                     {match.quantity}x
                                   </Text>{" "}
-                                  {match.menu_item}
+                                  {match.matched_menu_item}
                                 </Text>
                                 <Badge colorScheme="green">{match.price}</Badge>
                               </HStack>
