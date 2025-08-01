@@ -146,10 +146,10 @@ async function findAndSelectRestaurant(name) {
 
   // Scrolling logic to handle lazy loading
   let previousHeight;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 2; i++) {
     previousHeight = await page.evaluate("document.body.scrollHeight");
     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
     let newHeight = await page.evaluate("document.body.scrollHeight");
     if (newHeight === previousHeight) {
       break;
@@ -288,7 +288,7 @@ async function captureMenuItemsDuringScroll(restaurantPage) {
 
   // Start from top
   await restaurantPage.evaluate(() => window.scrollTo(0, 0));
-  await new Promise((resolve) => setTimeout(resolve, 4000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   const allMenuItems = new Map();
   const scrollIncrement = 400;
@@ -308,7 +308,7 @@ async function captureMenuItemsDuringScroll(restaurantPage) {
     // );
 
     // Wait for lazy loading
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     // First, test different selectors to see what's available
     const selectorTests = await restaurantPage.evaluate(() => {
@@ -553,6 +553,165 @@ async function captureMenuItemsDuringScroll(restaurantPage) {
   return finalUniqueItems;
 }
 
+async function clickAddToCartButton(page) {
+  const addToCartSelector = '[data-testid="AddToCartButtonSeoOptimization"]';
+
+  try {
+    await page.waitForSelector(addToCartSelector, { timeout: 5000 });
+    await page.click(addToCartSelector);
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const modalStillOpen = await page.$("#prism-modal-footer");
+    if (!modalStillOpen) {
+      return true;
+    } else {
+      return false;
+    }
+  } catch (error) {
+    console.log(
+      `❌ Could not find or click add to cart button: ${error.message}`
+    );
+  }
+}
+
+async function asjustQuantity(page, targetQuantity) {
+  if (targetQuantity <= 1) {
+    return true;
+  }
+
+  try {
+    const incrementSelector = '[data-testid="IncrementQuantity"]';
+    for (let i = 1; i < targetQuantity; i++) {
+      try {
+        await page.waitForSelector(incrementSelector, { timeout: 3000 });
+        await page.click(incrementSelector);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const currentQuantity = await page.$eval(
+          'input[type="number"]',
+          (el) => el.value
+        );
+        console.log(`   Current quantity in input: ${currentQuantity}`);
+      } catch (error) {
+        return false;
+      }
+    }
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function findAncClickMenuItem(page, orderItem) {
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  const searchTerms = [
+    orderItem.matched_menu_item, // Exact match first
+    orderItem.matched_menu_item.replace(/®/g, ""), // Without ®
+    orderItem.matched_menu_item.replace(/™/g, ""), // Without ™
+    orderItem.matched_menu_item.replace(/®/g, "").replace(/™/g, ""), // Without both
+  ];
+
+  let found = false;
+  let scrollAttempts = 0;
+  const maxScrollAttempts = 20;
+
+  while (!found && scrollAttempts < maxScrollAttempts) {
+    for (const searchTerm of searchTerms) {
+      found = await page.evaluate((exactTerm) => {
+        const menuItems = document.querySelectorAll('[data-testid="MenuItem');
+        for (const menuElement of menuItems) {
+          const rect = menuElement.getBoundingClientRect();
+          const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+          if (isVisible) {
+            const titleEl = menuElement.querySelector(
+              '[data-telemetry-id="storeMenuItem.title"]'
+            );
+            if (titeEl) {
+              const itemName = titleEl.innerText.trim();
+              if (itemname === exactTerm) {
+                menuElement.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+
+                menuElement.click();
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }, searchTerm);
+      if (found) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return true;
+      }
+    }
+    await page.evaluate(() => window.scrollBy(0, 400));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    scrollAttempts++;
+  }
+  return false;
+}
+
+async function addSimpleItemToCart(page, orderItem) {
+  console.log(
+    `🛒 Adding to cart: ${orderItem.quantity}x ${orderItem.matched_menu_item}`
+  );
+
+  try {
+    // Step 1: Find and click the menu item
+    console.log(`🔍 Step 1: Finding menu item...`);
+    const itemFound = await findAncClickMenuItem(page, orderItem);
+
+    if (!itemFound) {
+      console.log(`❌ Could not find item: ${orderItem.matched_menu_item}`);
+      return false;
+    }
+
+    console.log(`✅ Found and clicked: ${orderItem.matched_menu_item}`);
+
+    // Step 2: Wait for modal to open
+    console.log(`⏳ Step 2: Waiting for item modal to open...`);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Step 3: Adjust quantity if needed
+    if (orderItem.quantity > 1) {
+      console.log(`📊 Step 3: Adjusting quantity to ${orderItem.quantity}...`);
+      const quantityAdjusted = await asjustQuantity(page, orderItem.quantity);
+
+      if (!quantityAdjusted) {
+        console.log(`⚠️ Could not adjust quantity to ${orderItem.quantity}`);
+        // Continue anyway - maybe the default quantity is fine
+      }
+    } else {
+      console.log(`✅ Step 3: Quantity is 1, no adjustment needed`);
+    }
+
+    // Step 4: Click "Add to Cart" button
+    console.log(`🛒 Step 4: Adding to cart...`);
+    const cartAdded = await clickAddToCartButton(page);
+
+    if (cartAdded) {
+      console.log(
+        `✅ Successfully added ${orderItem.quantity}x ${orderItem.matched_menu_item} to cart!`
+      );
+      return true;
+    } else {
+      console.log(`❌ Failed to add ${orderItem.matched_menu_item} to cart`);
+      return false;
+    }
+  } catch (error) {
+    console.error(
+      `❌ Error adding ${orderItem.matched_menu_item} to cart:`,
+      error.message
+    );
+    return false;
+  }
+}
+
 async function testMenuScraping() {
   console.log("=== STARTING RESTAURANT SELECTION ===");
 
@@ -572,7 +731,7 @@ async function testMenuScraping() {
 
   // Extended wait for initial page load
   console.log("⏳ Waiting for initial page load (8 seconds)...");
-  await new Promise((resolve) => setTimeout(resolve, 8000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   // Pre-scraping debug
   const initialPageInfo = await restaurantPage.evaluate(() => {
@@ -630,4 +789,8 @@ module.exports = {
   getDoorDashPage,
   findAndSelectRestaurant,
   testMenuScraping,
+  clickAddToCartButton,
+  asjustQuantity,
+  findAncClickMenuItem,
+  addSimpleItemToCart, // Add this
 };

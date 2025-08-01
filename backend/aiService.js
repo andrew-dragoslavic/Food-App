@@ -22,11 +22,28 @@ async function parseOrderText(text, restaurant = null) {
       You MUST use the extract_order_details function to extract data from this text.
       Do NOT respond with questions or explanations.
       ${restaurantInstruction}
-      Extract all food items with quantities.
+
+      CRITICAL PARSING RULES:
+      1. If "X piece" or "X pc" appears, include it in item name, quantity = 1
+        - "20 piece nuggets" → {item: "20 piece nuggets", quantity: 1}
+        - "6 pc nuggets" → {item: "6 pc nuggets", quantity: 1}
+
+      2. If number appears as part of official menu item name, include it in name
+        - "2 Cheeseburger Meal" → {item: "2 Cheeseburger Meal", quantity: 1}
+        - "2 Ranch Snack Wrap Meal" → {item: "2 Ranch Snack Wrap Meal", quantity: 1}
+
+      3. If customer says "X orders of" or "X of the", use as quantity
+        - "3 orders of Big Mac" → {item: "Big Mac", quantity: 3}
+        - "2 of the 2 Cheeseburger Meal" → {item: "2 Cheeseburger Meal", quantity: 2}
+
+      4. For standalone items with numbers, treat as quantity
+        - "2 Big Macs" → {item: "Big Mac", quantity: 2}
+        - "3 fries" → {item: "fries", quantity: 3}
 
       Text: "${text}"
 
-      Use the extract_order_details function now.`;
+      Use the extract_order_details function now.
+      `;
 
     const jsonSchema = {
       type: "object",
