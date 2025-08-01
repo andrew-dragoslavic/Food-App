@@ -87,7 +87,8 @@ router.post("/transcribe", async (req, res) => {
         // Combine the original order with the new clarification
 
         // Re-process with combined context
-        parsedOrder = await parseOrderText(transcription);
+        restaurant = session.restaurant;
+        parsedOrder = await parseOrderText(transcription, restaurant);
         menuItems = session.menuItems; // Reuse stored menu items
         prediction = await resolveMenuItems(
           parsedOrder,
@@ -131,6 +132,7 @@ router.post("/transcribe", async (req, res) => {
             originalTranscription: transcription,
             parsedOrder: parsedOrder,
             menuItems: menuItems,
+            restaurant: parsedOrder.restaurant,
             currentPrediction: prediction,
             attempts: 1,
           });
@@ -154,6 +156,7 @@ router.post("/transcribe", async (req, res) => {
           originalTranscription: transcription,
           parsedOrder: parsedOrder,
           menuItems: menuItems,
+          restaurant: parsedOrder.restaurant,
           currentPrediction: prediction,
           attempts: 1,
         });

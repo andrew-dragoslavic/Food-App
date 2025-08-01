@@ -9,15 +9,24 @@ const generativeModel = vertexAI.getGenerativeModel({
   model: "gemini-2.5-pro",
 });
 
-async function parseOrderText(text) {
+async function parseOrderText(text, restaurant = null) {
   try {
-    console.log("Parsing text:", text); // Debug log
+    console.log("Parsing text:", text); // Debug log\
+    if (restaurant) {
+      restaurantInstruction = `The restaurant is ${restaurant}`;
+    } else {
+      restaurantInstruction = `If the restuarant is not mentioned use "Not Specified"`;
+    }
+
     const prompt = `
-      Extract the restaurant name and a list of all food items with their quantities from the following text.
-      Return the data in the specified JSON format.
+      You MUST use the extract_order_details function to extract data from this text.
+      Do NOT respond with questions or explanations.
+      ${restaurantInstruction}
+      Extract all food items with quantities.
 
       Text: "${text}"
-    `;
+
+      Use the extract_order_details function now.`;
 
     const jsonSchema = {
       type: "object",
@@ -40,7 +49,12 @@ async function parseOrderText(text) {
 
     const request = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      // Removed generationConfig to test natural function calling
+      generationConfig: {
+        temperature: 0.1, // Add this section
+        topP: 0.8,
+        candidateCount: 1,
+        maxOutputTokens: 1000,
+      },
       tools: [
         {
           functionDeclarations: [
@@ -244,6 +258,12 @@ async function resolveMenuItems(
 
     const request = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.1, // Add this section
+        topP: 0.8,
+        candidateCount: 1,
+        maxOutputTokens: 4000,
+      },
       tools: [
         {
           functionDeclarations: [
