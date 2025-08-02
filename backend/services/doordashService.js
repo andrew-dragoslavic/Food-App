@@ -784,6 +784,44 @@ async function testMenuScraping() {
   return menuItems;
 }
 
+async function placeOrder(confirmedItems, restaurantPage = null) {
+  const targetPage = restaurantPage || getDoorDashPage();
+  orderedItems = [];
+  for (const item of confirmedItems) {
+    try {
+      const itemAdded = addSimpleItemToCart(targetPage, item);
+      orderedItems.push({
+        item: item.matched_menu_item,
+        quantity: item.quantity,
+        price: item.price,
+        added: itemAdded,
+        status: itemAdded ? "success" : "failed",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    } catch (error) {
+      orderResults.push({
+        item: item.matched_menu_item,
+        quantity: item.quantity,
+        price: item.price,
+        added: false,
+        status: "error",
+        error: error.message,
+      });
+    }
+  }
+
+  const successCount = orderedResults.filter((r) => r.added).length;
+  return {
+    success: successCount === orderResults.length,
+    items: orderResults,
+    message:
+      successCount === orderResults.length
+        ? `All ${successCount} items added to cart successfully!`
+        : `${successCount}/${orderResults.length} items added to cart.`,
+  };
+}
+
 module.exports = {
   initialize,
   getDoorDashPage,
@@ -792,5 +830,6 @@ module.exports = {
   clickAddToCartButton,
   asjustQuantity,
   findAncClickMenuItem,
-  addSimpleItemToCart, // Add this
+  addSimpleItemToCart,
+  placeOrder, // Add this
 };

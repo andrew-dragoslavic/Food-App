@@ -4,6 +4,7 @@ const { parseOrderText, resolveMenuItems } = require("./aiService.js");
 const {
   findAndSelectRestaurant,
   testMenuScraping,
+  placeOrder,
 } = require("./services/doordashService.js");
 const { clarificationService } = require("./services/clarificationService.js");
 const { v4: uuidv4 } = require("uuid");
@@ -117,7 +118,8 @@ router.post("/transcribe", async (req, res) => {
           // No more clarification needed - delete session and proceed with order
           deleteSession(sessionId);
           responseSessionId = null;
-          // TODO: Place the order here
+          const result = await placeOrder(prediction.confident_matches);
+          console.log("Order Result", result);
         }
       } else {
         // Session not found, treat as new request
@@ -163,7 +165,8 @@ router.post("/transcribe", async (req, res) => {
       } else {
         // No clarification needed, proceed with order
         responseSessionId = null;
-        // TODO: Place the order here
+        const result = await placeOrder(prediction.confident_matches);
+        console.log("Order Result", result);
       }
     }
 
