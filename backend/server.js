@@ -25,10 +25,18 @@ async function startServer() {
     });
   });
 
-  await doordashService.initialize();
-
-  app.listen(5000, () => {
-    console.log(`Server listening on port 5000`);
+  app.listen(5001, () => {
+    console.log(`Server listening on port 5001`);
   });
+
+  // Initialize DoorDash service in background after server starts
+  console.log("Starting DoorDash initialization...");
+  doordashService.initialize()
+    .then(() => {
+      console.log("✅ DoorDash service initialized successfully!");
+    })
+    .catch((error) => {
+      console.error("❌ DoorDash initialization failed:", error.message);
+    });
 }
 startServer();

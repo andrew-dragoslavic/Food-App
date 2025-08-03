@@ -5,6 +5,7 @@ const {
   findAndSelectRestaurant,
   testMenuScraping,
   placeOrder,
+  getDoorDashPage,
 } = require("./services/doordashService.js");
 const { clarificationService } = require("./services/clarificationService.js");
 const { v4: uuidv4 } = require("uuid");
@@ -118,8 +119,6 @@ router.post("/transcribe", async (req, res) => {
           // No more clarification needed - delete session and proceed with order
           deleteSession(sessionId);
           responseSessionId = null;
-          const result = await placeOrder(prediction.confident_matches);
-          console.log("Order Result", result);
         }
       } else {
         // Session not found, treat as new request
@@ -165,8 +164,6 @@ router.post("/transcribe", async (req, res) => {
       } else {
         // No clarification needed, proceed with order
         responseSessionId = null;
-        const result = await placeOrder(prediction.confident_matches);
-        console.log("Order Result", result);
       }
     }
 
@@ -184,6 +181,44 @@ router.post("/transcribe", async (req, res) => {
     res
       .status(500)
       .json({ error: "Speech processing failed: " + error.message });
+  }
+});
+
+router.post("/place-order", async (req, res) => {
+  try {
+    const { confirmedItems, restaurant } = req.body;
+
+    if (!confirmedItems || confirmedItems.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No confirmed items provided"
+      });
+    }
+
+    console.log(`🍕 Starting order placement for ${confirmedItems.length} items`);
+    console.log("Confirmed items:", confirmedItems);
+
+    // Get the current DoorDash page (already on restaurant page)
+    // const doordashPage = getDoorDashPage();
+
+    // Just scroll back to the top of the restaurant page
+    console.log("📍 Scrolling back to top of restaurant page...");
+    // await doordashPage.evaluate(() => window.scrollTo(0, 0));
+    // await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for scroll
+
+    // Place the order using the current page
+    const orderResult = await placeOrder(confirmedItems);
+    
+    console.log("📋 Order placement result:", orderResult);
+    res.json(orderResult);
+    
+  } catch (error) {
+    console.error("❌ Order placement error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to place order",
+      error: error.message
+    });
   }
 });
 

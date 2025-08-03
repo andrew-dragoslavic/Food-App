@@ -30,6 +30,8 @@ function App() {
   const [clarificationChoices, setClarificationChoices] = useState({});
   const [sessionId, setSessionId] = useState(null);
   const [needsClarification, setNeedsClarification] = useState(false);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [orderResult, setOrderResult] = useState(null);
 
   useEffect(() => {
     const change = onAuthStateChanged(auth, (currentUser) => {
@@ -69,7 +71,7 @@ function App() {
       };
 
       recorder.onstop = () => {
-        const newAudioBlob = new Blob(audioChunks, { type: "audio/wav" });
+        const newAudioBlob = new Blob(audioChunks, { type: "audio/webm;codecs=opus" });
         setAudioBlob(newAudioBlob);
         processAudio(newAudioBlob);
       };
@@ -131,6 +133,47 @@ function App() {
       ...prev,
       [itemIndex]: value,
     }));
+  };
+
+  const handleProceedWithOrder = async () => {
+    if (!menuResolution?.confident_matches || menuResolution.confident_matches.length === 0) {
+      setVoiceError("No confirmed items to order");
+      return;
+    }
+
+    setIsPlacingOrder(true);
+    setVoiceError("");
+    setOrderResult(null);
+
+    try {
+      const response = await fetch("/api/speech/place-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          confirmedItems: menuResolution.confident_matches,
+          restaurant: parsedOrder?.restaurant
+        }),
+      });
+
+      const result = await response.json();
+      setOrderResult(result);
+
+      if (result.success) {
+        // Clear the order after successful placement
+        setParsedOrder(null);
+        setMenuResolution(null);
+        setTranscript("");
+        setSessionId(null);
+        setNeedsClarification(false);
+      }
+    } catch (error) {
+      setVoiceError("Failed to place order. Please try again.");
+      console.error("Order placement error:", error);
+    } finally {
+      setIsPlacingOrder(false);
+    }
   };
 
   if (loading) {
@@ -371,18 +414,80 @@ function App() {
                     </Alert.Root>
                   )}
 
-                {/* Confirm Order Button - only show when all clarifications are resolved */}
+                {/* Proceed with Order Button */}
                 {menuResolution.confident_matches &&
                   menuResolution.confident_matches.length > 0 && (
-                    <Button colorScheme="blue" size="lg" w="full">
-                      Proceed with Order
-                    </Button>
+                    <>
+                      <Button 
+                        colorScheme="blue" 
+                        size="lg" 
+                        w="full"
+                        onClick={handleProceedWithOrder}
+                        isLoading={isPlacingOrder}
+                        loadingText="Placing Order..."
+                        isDisabled={isPlacingOrder}
+                      >
+                        Proceed with Order
+                      </Button>
+
+                      {/* Order Result Display */}
+                      {orderResult && (
+                        <Box
+                          p={4}
+                          bg={orderResult.success ? "green.50" : "red.50"}
+                          rounded="md"
+                          borderWidth="1px"
+                          borderColor={orderResult.success ? "green.200" : "red.200"}
+                          w="full"
+                        >
+                          <VStack align="start" spacing={3}>
+                            <Text
+                              fontWeight="bold"
+                              color={orderResult.success ? "green.700" : "red.700"}
+                            >
+                              {orderResult.success ? "✅ Order Status" : "❌ Order Failed"}
+                            </Text>
+                            <Text>{orderResult.message}</Text>
+                            
+                            {orderResult.items && (
+                              <VStack align="start" spacing={2} w="full">
+                                <Text fontWeight="medium" fontSize="sm">Item Results:</Text>
+                                {orderResult.items.map((item, index) => (
+                                  <Box
+                                    key={index}
+                                    p={2}
+                                    bg="white"
+                                    rounded="md"
+                                    w="full"
+                                    borderLeftWidth="3px"
+                                    borderLeftColor={item.added ? "green.400" : "red.400"}
+                                  >
+                                    <HStack justify="space-between">
+                                      <Text fontSize="sm">
+                                        {item.quantity}x {item.item}
+                                      </Text>
+                                      <Badge 
+                                        colorScheme={item.added ? "green" : "red"}
+                                        size="sm"
+                                      >
+                                        {item.status}
+                                      </Badge>
+                                    </HStack>
+                                  </Box>
+                                ))}
+                              </VStack>
+                            )}
+                          </VStack>
+                        </Box>
+                      )}
+                    </>
                   )}
               </VStack>
             </Box>
           )}
 
-          <Button colorScheme="gray" onClick={handleLogout}>
+          {/* Logout Button */}
+          <Button colorScheme="red" onClick={handleLogout}>
             Logout
           </Button>
         </VStack>
