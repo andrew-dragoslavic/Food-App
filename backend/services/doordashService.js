@@ -844,7 +844,6 @@ async function testMenuScraping() {
 async function placeOrder(confirmedItems) {
   const targetPage = getRestaurantPage(); // Use restaurant page instead of main page
   
-  // First, scroll back to the top of the page with debugging
   console.log("📍 Scrolling back to top of restaurant page...");
   
   // Check current scroll position
