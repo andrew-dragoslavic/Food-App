@@ -730,8 +730,9 @@ async function addSimpleItemToCart(page, orderItem) {
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     const sizeOptions = await page.$$('input[type="radio"]');
-    if (sizeOptions.length != 0) {
-      selectItemSize(orderItem.matched_menu_item.size);
+    if (sizeOptions.length > 0) {
+      const itemSize = orderItem.size || "Medium";
+      selectItemSize(page, itemSize);
     }
 
     // Step 3: Adjust quantity if needed
@@ -851,15 +852,56 @@ async function testMenuScraping() {
 
 async function selectItemSize(page, itemSize) {
   try {
-    if (itemSize === "Small") {
-      await page.click("#Toggle-\\:rad\\:");
-    } else if (itemSize === "Medium") {
-      await page.click("#Toggle-\\:rae\\:");
+    await page.waitForSelector('input[type="radio"]', { timeout: 3000 });
+
+    const sizeOptions = page.$$eval('input[type="radio"]', (radios) => {
+      return radios.map((radio, index) => {
+        const label = document.querySelector(`label=[for="${radio.id}"]`);
+        let labelText = "";
+        if (label) {
+          labelText = label.innerText.trim();
+          const size = labelText.split("\n")[0];
+        }
+
+        return {
+          index,
+          id: radio.id,
+          value: radio.value,
+          checked: radio.checked,
+          size: size,
+        };
+      });
+    });
+
+    let targetOption = null;
+
+    targetOption = sizeOptions.find(
+      (option) => option.size.toLowerCase() === itemSize.toLowerCase()
+    );
+
+    if (targetOption && !targetOption.checked) {
+      await page.click(`#${CSS.escape(targetOption.id)}`);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return true;
+    } else if (targetOption && targetOption.checked) {
+      return true;
     } else {
-      await page.click("#Toggle-\\:raf\\:");
+      console.log(`⚠️ Could not find size option for: ${itemSize}`);
+      console.log("Available options:");
+      sizeOptions.forEach((opt) => console.log(`  - "${opt.size}"`));
+
+      if (sizeOptions.length > 0 && !sizeOptions[0].checked) {
+        console.log(
+          `🔄 Fallback: selecting first option: ${sizeOptions[0].labelText}`
+        );
+        await page.click(`#${CSS.escape(sizeOptions[0].id)}`);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return true;
+      }
+      return false;
     }
-    return true;
   } catch (error) {
+    console.log(`❌ Error selecting size: ${error.message}`);
     return false;
   }
 }
