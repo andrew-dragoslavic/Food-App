@@ -18,8 +18,7 @@ const yourPassword = process.env.DOORDASH_PASSWORD;
 async function initialize() {
   browser = await puppeteer.launch({
     headless: false,
-    args: ["--no-sandbox", "disable-setuid-sandbox",
-      "--window-size=1920,1080"],
+    args: ["--no-sandbox", "disable-setuid-sandbox", "--window-size=1920,1080"],
   });
 
   page = await browser.newPage();
@@ -622,36 +621,39 @@ async function findAndClickMenuItem(page, orderItem) {
   while (!found && scrollAttempts < maxScrollAttempts) {
     for (const searchTerm of searchTerms) {
       console.log(`🔍 Looking for: "${searchTerm}"`);
-      
+
       // Get all menu items currently visible
       const menuItems = await page.$$('[data-testid="MenuItem"]');
-      
+
       for (const menuItem of menuItems) {
         try {
           // Check if this item matches what we're looking for
           const itemData = await menuItem.evaluate((element, searchTerm) => {
-            const titleEl = element.querySelector('[data-telemetry-id="storeMenuItem.title"]');
+            const titleEl = element.querySelector(
+              '[data-telemetry-id="storeMenuItem.title"]'
+            );
             if (!titleEl) return null;
-            
+
             const itemName = titleEl.innerText.trim();
             const rect = element.getBoundingClientRect();
-            const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-            
+            const isVisible =
+              rect.top >= 0 && rect.bottom <= window.innerHeight;
+
             return {
               name: itemName,
               matches: itemName === searchTerm,
-              isVisible: isVisible
+              isVisible: isVisible,
             };
           }, searchTerm);
 
           if (itemData && itemData.matches) {
             console.log(`✅ Found matching item: "${itemData.name}"`);
-            
+
             // Scroll item into view if needed
             if (!itemData.isVisible) {
-              await menuItem.scrollIntoView({ 
-                behavior: "smooth", 
-                block: "center" 
+              await menuItem.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
               });
               await new Promise((resolve) => setTimeout(resolve, 1000));
             }
@@ -659,21 +661,23 @@ async function findAndClickMenuItem(page, orderItem) {
             // Use the SAME click method as login - waitForSelector + click
             try {
               // Wait for the menu item to be clickable (same pattern as login)
-              await page.waitForSelector('[data-testid="MenuItem"]', { 
-                visible: true, 
-                timeout: 5000 
+              await page.waitForSelector('[data-testid="MenuItem"]', {
+                visible: true,
+                timeout: 5000,
               });
-              
+
               // Click using the same direct approach as login
               await menuItem.click();
               console.log(`🖱️ Clicked menu item using login method`);
-              
+
               // Wait for modal to open (same pattern as login navigation waits)
               await new Promise((resolve) => setTimeout(resolve, 2000));
-              
+
               // Check if modal opened using simple selector check (like login checks)
-              const modalOpened = await page.$('[data-testid="AddToCartButtonSeoOptimization"]');
-              
+              const modalOpened = await page.$(
+                '[data-testid="AddToCartButtonSeoOptimization"]'
+              );
+
               if (modalOpened) {
                 console.log(`🎉 Modal opened successfully!`);
                 return true;
@@ -681,7 +685,6 @@ async function findAndClickMenuItem(page, orderItem) {
                 console.log(`❌ Modal didn't open, trying next approach...`);
                 continue;
               }
-              
             } catch (clickError) {
               console.log(`⚠️ Click failed: ${clickError.message}`);
               continue;
@@ -693,14 +696,14 @@ async function findAndClickMenuItem(page, orderItem) {
         }
       }
     }
-    
+
     // Scroll down to find more items (same incremental approach)
     console.log(`⬇️ Scrolling down to find more items...`);
     await page.evaluate(() => window.scrollBy(0, 400));
     await new Promise((resolve) => setTimeout(resolve, 1000));
     scrollAttempts++;
   }
-  
+
   console.log(`❌ Could not find and click: ${orderItem.matched_menu_item}`);
   return false;
 }
@@ -725,6 +728,11 @@ async function addSimpleItemToCart(page, orderItem) {
     // Step 2: Wait for modal to open
     console.log(`⏳ Step 2: Waiting for item modal to open...`);
     await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    const sizeOptions = await page.$$('input[type="radio"]');
+    if (sizeOptions.length != 0) {
+      selectItemSize(orderItem.matched_menu_item.size);
+    }
 
     // Step 3: Adjust quantity if needed
     if (orderItem.quantity > 1) {
@@ -841,22 +849,37 @@ async function testMenuScraping() {
   return menuItems;
 }
 
+async function selectItemSize(page, itemSize) {
+  try {
+    if (itemSize === "Small") {
+      await page.click("#Toggle-\\:rad\\:");
+    } else if (itemSize === "Medium") {
+      await page.click("#Toggle-\\:rae\\:");
+    } else {
+      await page.click("#Toggle-\\:raf\\:");
+    }
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 async function placeOrder(confirmedItems) {
   const targetPage = getRestaurantPage(); // Use restaurant page instead of main page
-  
+
   console.log("📍 Scrolling back to top of restaurant page...");
-  
+
   // Check current scroll position
   const currentScroll = await targetPage.evaluate(() => window.scrollY);
   console.log(`Current scroll position: ${currentScroll}px`);
-  
+
   await targetPage.evaluate(() => window.scrollTo(0, 0));
   await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for scroll
-  
+
   // Verify scroll worked
   const newScroll = await targetPage.evaluate(() => window.scrollY);
   console.log(`New scroll position: ${newScroll}px`);
-  
+
   if (newScroll !== 0) {
     console.log("⚠️ Scroll to top didn't work, trying again...");
     await targetPage.evaluate(() => {
@@ -865,13 +888,13 @@ async function placeOrder(confirmedItems) {
       document.documentElement.scrollTop = 0; // For Chrome, Firefox, IE and Opera
     });
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    
+
     const finalScroll = await targetPage.evaluate(() => window.scrollY);
     console.log(`Final scroll position: ${finalScroll}px`);
   }
-  
+
   const orderedResults = [];
-  
+
   for (const item of confirmedItems) {
     try {
       const itemAdded = await addSimpleItemToCart(targetPage, item);
