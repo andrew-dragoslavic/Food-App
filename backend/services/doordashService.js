@@ -732,7 +732,7 @@ async function addSimpleItemToCart(page, orderItem) {
     const sizeOptions = await page.$$('input[type="radio"]');
     if (sizeOptions.length > 0) {
       const itemSize = orderItem.size || "Medium";
-      selectItemSize(page, itemSize);
+      await selectItemSize(page, itemSize);
     }
 
     // Step 3: Adjust quantity if needed
@@ -854,13 +854,14 @@ async function selectItemSize(page, itemSize) {
   try {
     await page.waitForSelector('input[type="radio"]', { timeout: 3000 });
 
-    const sizeOptions = page.$$eval('input[type="radio"]', (radios) => {
+    const sizeOptions = await page.$$eval('input[type="radio"]', (radios) => {
       return radios.map((radio, index) => {
-        const label = document.querySelector(`label=[for="${radio.id}"]`);
+        const label = document.querySelector(`label[for="${radio.id}"]`);
         let labelText = "";
+        let size = "";
         if (label) {
           labelText = label.innerText.trim();
-          const size = labelText.split("\n")[0];
+          size = labelText.split("\n")[0];
         }
 
         return {
@@ -869,6 +870,7 @@ async function selectItemSize(page, itemSize) {
           value: radio.value,
           checked: radio.checked,
           size: size,
+          labelText: labelText,
         };
       });
     });
@@ -880,7 +882,8 @@ async function selectItemSize(page, itemSize) {
     );
 
     if (targetOption && !targetOption.checked) {
-      await page.click(`#${CSS.escape(targetOption.id)}`);
+      console.log(`✅ Found size option: ${targetOption.size}`);
+      await page.click(`#${targetOption.id.replace(/:/g, "\\:")}`);
       await new Promise((resolve) => setTimeout(resolve, 500));
       return true;
     } else if (targetOption && targetOption.checked) {
@@ -894,7 +897,7 @@ async function selectItemSize(page, itemSize) {
         console.log(
           `🔄 Fallback: selecting first option: ${sizeOptions[0].labelText}`
         );
-        await page.click(`#${CSS.escape(sizeOptions[0].id)}`);
+        await page.click(`#${targetOption.id.replace(/:/g, "\\:")}`);
         await new Promise((resolve) => setTimeout(resolve, 500));
         return true;
       }
