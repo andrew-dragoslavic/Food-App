@@ -90,7 +90,11 @@ router.post("/transcribe", async (req, res) => {
 
         // Re-process with combined context
         restaurant = session.restaurant;
-        parsedOrder = await parseOrderText(transcription, restaurant);
+        parsedOrder = await parseOrderText(
+          transcription,
+          restaurant,
+          session.initialItems
+        );
         menuItems = session.menuItems; // Reuse stored menu items
         prediction = await resolveMenuItems(
           parsedOrder,
@@ -131,6 +135,7 @@ router.post("/transcribe", async (req, res) => {
           responseSessionId = createSession({
             createdAt: new Date(),
             originalTranscription: transcription,
+            initialItems: parsedOrder,
             parsedOrder: parsedOrder,
             menuItems: menuItems,
             restaurant: parsedOrder.restaurant,
@@ -155,6 +160,7 @@ router.post("/transcribe", async (req, res) => {
         responseSessionId = createSession({
           createdAt: new Date(),
           originalTranscription: transcription,
+          initialItems: parsedOrder,
           parsedOrder: parsedOrder,
           menuItems: menuItems,
           restaurant: parsedOrder.restaurant,
@@ -191,11 +197,13 @@ router.post("/place-order", async (req, res) => {
     if (!confirmedItems || confirmedItems.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "No confirmed items provided"
+        message: "No confirmed items provided",
       });
     }
 
-    console.log(`🍕 Starting order placement for ${confirmedItems.length} items`);
+    console.log(
+      `🍕 Starting order placement for ${confirmedItems.length} items`
+    );
     console.log("Confirmed items:", confirmedItems);
 
     // Get the current DoorDash page (already on restaurant page)
@@ -208,16 +216,15 @@ router.post("/place-order", async (req, res) => {
 
     // Place the order using the current page
     const orderResult = await placeOrder(confirmedItems);
-    
+
     console.log("📋 Order placement result:", orderResult);
     res.json(orderResult);
-    
   } catch (error) {
     console.error("❌ Order placement error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to place order",
-      error: error.message
+      error: error.message,
     });
   }
 });

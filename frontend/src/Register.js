@@ -1,69 +1,117 @@
 import React, { useState } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from './firebase';
-import { Box, VStack, Heading, Input, Button, Text } from '@chakra-ui/react';
+import { auth } from "./firebase";
+import { motion } from "framer-motion";
+import { Mail, Lock, UserPlus, Loader2 } from "lucide-react";
 
 function Register() {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
 
-        try {
-            await createUserWithEmailAndPassword(auth, email, password);
-            console.log('Registration Successful');
-        } catch (error) {
-            setError(error.Message);
-        }
-
-        setLoading(false);
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      console.log("Registration Successful");
+    } catch (error) {
+      setError(error.message);
     }
 
-return (
-    <Box bg="white" p={8} rounded="lg" shadow="md" w="full" maxW="sm">
-      <VStack spacing={4}>
-        <Heading size="md" color="gray.700">Register</Heading>
-        <form onSubmit={handleSubmit} style={{width: '100%'}}>
-          <VStack spacing={4} w="full">
-            <Box w="full">
-              <Text mb={2} fontSize="sm" fontWeight="medium">Email</Text>
-              <Input 
-                type="email" 
+    setLoading(false);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: 0.1 }}
+      className="w-full max-w-md mx-auto"
+    >
+      <div className="bg-dark-900/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-dark-700/20">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-dark-50 mb-2">
+            Create Account
+          </h2>
+          <p className="text-dark-300">
+            Join us for voice-powered food ordering
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-dark-200 mb-2">
+              Email Address
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-dark-400" />
+              <input
+                type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter your email"
+                required
+                className="w-full pl-10 pr-4 py-3 border border-dark-600 bg-dark-800/50 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 text-dark-100 placeholder-dark-400"
               />
-            </Box>
-            
-            <Box w="full">
-              <Text mb={2} fontSize="sm" fontWeight="medium">Password</Text>
-              <Input 
-                type="password" 
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-dark-200 mb-2">
+              Password
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-dark-400" />
+              <input
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
+                placeholder="Create a password"
+                required
+                className="w-full pl-10 pr-4 py-3 border border-dark-600 bg-dark-800/50 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 text-dark-100 placeholder-dark-400"
               />
-            </Box>
-            
-            <Button 
-              type="submit" 
-              colorScheme="blue" 
-              w="full"
-              loading={loading}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`
+                            w-full py-3 px-4 rounded-xl font-semibold transition-all duration-200
+                            ${
+                              loading
+                                ? "bg-dark-600 cursor-not-allowed"
+                                : "bg-gradient-to-r from-accent-600 to-primary-700 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
+                            }
+                            text-white shadow-lg
+                        `}
+          >
+            <div className="flex items-center justify-center gap-2">
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <UserPlus className="h-5 w-5" />
+              )}
+              {loading ? "Creating account..." : "Create Account"}
+            </div>
+          </button>
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-3 bg-red-900/50 border border-red-700/50 rounded-xl"
             >
-              {loading ? 'Registering...' : 'Register'}
-            </Button>
-            
-            {error && <Text color="red.500" fontSize="sm">{error}</Text>}
-          </VStack>
+              <p className="text-red-200 text-sm">{error}</p>
+            </motion.div>
+          )}
         </form>
-      </VStack>
-    </Box>
+      </div>
+    </motion.div>
   );
 }
 

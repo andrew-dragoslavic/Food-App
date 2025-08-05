@@ -9,41 +9,66 @@ const generativeModel = vertexAI.getGenerativeModel({
   model: "gemini-2.5-pro",
 });
 
-async function parseOrderText(text, restaurant = null) {
+async function parseOrderText(text, restaurant = null, initialItems = null) {
   try {
-    console.log("Parsing text:", text); // Debug log\
-    if (restaurant) {
-      restaurantInstruction = `The restaurant is ${restaurant}`;
-    } else {
-      restaurantInstruction = `If the restuarant is not mentioned use "Not Specified"`;
-    }
+    console.log("Parsing text:", text); // Debug log
+    const restaurantInstruction = restaurant
+      ? `Restaurant: ${restaurant}`
+      : `Restaurant: Not Specified`;
+    const initialOrderInstruction = initialItems
+      ? `Initial Order: ${JSON.stringify(initialItems)}`
+      : `Initial Order: None`;
 
     const prompt = `
-      You MUST use the extract_order_details function to extract data from this text.
+      You MUST use the extract_order_details function to extract ordered items and their quantities from the provided text.
       Do NOT respond with questions or explanations.
+
       ${restaurantInstruction}
+      ${initialOrderInstruction}
 
-      CRITICAL PARSING RULES:
-      1. If "X piece" or "X pc" appears, include it in item name, quantity = 1
-        - "20 piece nuggets" → {item: "20 piece nuggets", quantity: 1}
-        - "6 pc nuggets" → {item: "6 pc nuggets", quantity: 1}
+      **Instructions:**
+      - Extract items and quantities from the text based on the parsing rules below.
+      - If an initial order is provided, use it as context to interpret the text:
+        - For modifications (e.g., size, options), apply them to the relevant item from the initial order.
+        - For new items, extract them as standalone entries.
+      - If no initial order is given, treat the text as a new order.
 
-      2. If number appears as part of official menu item name, include it in name
-        - "2 Cheeseburger Meal" → {item: "2 Cheeseburger Meal", quantity: 1}
-        - "2 Ranch Snack Wrap Meal" → {item: "2 Ranch Snack Wrap Meal", quantity: 1}
+      **Critical Parsing Rules:**
+      1. If "X piece" or "X pc" appears in the item description, include it in the item name with quantity 1.
+         - Example: "20 piece nuggets" → {item: "20 piece nuggets", quantity: 1}
+         - Example: "6 pc nuggets" → {item: "6 pc nuggets", quantity: 1}
 
-      3. If customer says "X orders of" or "X of the", use as quantity
-        - "3 orders of Big Mac" → {item: "Big Mac", quantity: 3}
-        - "2 of the 2 Cheeseburger Meal" → {item: "2 Cheeseburger Meal", quantity: 2}
+      2. If a number is part of the official menu item name, include it in the item name with quantity 1.
+         - Example: "2 Cheeseburger Meal" → {item: "2 Cheeseburger Meal", quantity: 1}
+         - Example: "2 Ranch Snack Wrap Meal" → {item: "2 Ranch Snack Wrap Meal", quantity: 1}
 
-      4. For standalone items with numbers, treat as quantity
-        - "2 Big Macs" → {item: "Big Mac", quantity: 2}
-        - "3 fries" → {item: "fries", quantity: 3}
+      3. If the customer says "X orders of" or "X of the", use X as the quantity.
+         - Example: "3 orders of Big Mac" → {item: "Big Mac", quantity: 3}
+         - Example: "2 of the 2 Cheeseburger Meal" → {item: "2 Cheeseburger Meal", quantity: 2}
 
-      Text: "${text}"
+      4. For standalone items with numbers, treat the number as quantity.
+         - Example: "2 Big Macs" → {item: "Big Mac", quantity: 2}
+         - Example: "3 fries" → {item: "fries", quantity: 3}
 
-      Use the extract_order_details function now.
-      `;
+      **Additional Guidelines:**
+      - Include options or modifications (e.g., size, extras) in the item name.
+        - Example: "a large Big Mac" → {item: "large Big Mac", quantity: 1}
+      - If the text modifies an item from the initial order, adjust that item accordingly.
+        - Example: 
+          - Initial Order: {item: "Big Mac", quantity: 1}
+          - Text: "make it large"
+          - Output: {item: "large Big Mac", quantity: 1}
+      - If the text adds new items, extract them separately.
+        - Example: 
+          - Initial Order: {item: "Big Mac", quantity: 1}
+          - Text: "and a Coke"
+          - Output: {item: "Coke", quantity: 1}
+      - Note: The text may include clarifications (e.g., "Which option for X? 1, 2, or 3. I want 2"). Parse the entire text to understand context.
+
+      Text to parse: "${text}"
+
+      Use the extract_order_details function to provide the parsed order details from the text.
+    `;
 
     const jsonSchema = {
       type: "object",
