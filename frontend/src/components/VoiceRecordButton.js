@@ -52,12 +52,12 @@ const VoiceRecordButton = ({
     >
       {loading ? (
         // Custom CSS loader - sized properly to fit inside the circle
-        <span 
-          className="loader" 
-          style={{ 
-            fontSize: '20px', // Much smaller than the default 45px
-            width: '20px',
-            height: '20px'
+        <span
+          className="loader"
+          style={{
+            fontSize: "20px", // Much smaller than the default 45px
+            width: "20px",
+            height: "20px",
           }}
         ></span>
       ) : isRecording ? (
