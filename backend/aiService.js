@@ -81,6 +81,7 @@ async function parseOrderText(text, restaurant = null, initialItems = null) {
             properties: {
               item: { type: "string" },
               quantity: { type: "number" },
+              size: { type: "string" },
             },
             required: ["item", "quantity"],
           },
@@ -244,6 +245,7 @@ async function resolveMenuItems(
             properties: {
               requested_item: { type: "string" },
               quantity: { type: "number" },
+              size: { type: "string" },
               matched_menu_item: { type: "string" },
               price: { type: "string" },
               confidence_reason: { type: "string" },
@@ -263,6 +265,7 @@ async function resolveMenuItems(
             properties: {
               requested_item: { type: "string" },
               quantity: { type: "number" },
+              size: { type: "string" },
               possible_matches: {
                 type: "array",
                 items: {
@@ -290,6 +293,7 @@ async function resolveMenuItems(
             properties: {
               requested_item: { type: "string" },
               quantity: { type: "number" },
+              size: { type: "string" },
               suggestion: { type: "string" },
             },
           },
