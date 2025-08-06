@@ -43,38 +43,48 @@ function deleteSession(sessionId) {
 
 router.post("/transcribe", async (req, res) => {
   try {
-    // Check if file was uploaded
-    if (!req.file) {
-      return res.status(400).json({ error: "No audio file provided" });
-    }
-
+    let transcription;
     const sessionId = req.body.sessionId;
 
-    // Get audio data from multer
-    const audioBytes = req.file.buffer.toString("base64");
+    // Check if this is a text-based clarification or audio
+    if (req.body.text) {
+      // Text-based clarification
+      transcription = req.body.text;
+      console.log("📝 Processing text clarification:", transcription);
+    } else {
+      // Audio-based request
+      if (!req.file) {
+        return res
+          .status(400)
+          .json({ error: "No audio file or text provided" });
+      }
 
-    // Configure recognition request
-    const request = {
-      audio: {
-        content: audioBytes,
-      },
-      config: {
-        encoding: "WEBM_OPUS",
-        sampleRateHertz: 48000,
-        languageCode: "en-US",
-      },
-    };
+      // Get audio data from multer
+      const audioBytes = req.file.buffer.toString("base64");
 
-    // Process with Google Speech API
-    const [response] = await client.recognize(request);
+      // Configure recognition request
+      const request = {
+        audio: {
+          content: audioBytes,
+        },
+        config: {
+          encoding: "WEBM_OPUS",
+          sampleRateHertz: 48000,
+          languageCode: "en-US",
+        },
+      };
 
-    if (!response.results || response.results.length === 0) {
-      return res.json({ text: "No speech detected" });
+      // Process with Google Speech API
+      const [response] = await client.recognize(request);
+
+      if (!response.results || response.results.length === 0) {
+        return res.json({ text: "No speech detected" });
+      }
+
+      transcription = response.results
+        .map((result) => result.alternatives[0].transcript)
+        .join("\n");
     }
-
-    const transcription = response.results
-      .map((result) => result.alternatives[0].transcript)
-      .join("\n");
 
     let parsedOrder,
       menuItems,

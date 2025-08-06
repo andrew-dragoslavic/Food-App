@@ -45,9 +45,12 @@ const MenuResolution = ({ menuResolution, onClarificationResponse }) => {
               >
                 <div>
                   <p className="text-white font-medium">
-                    {item.name || item.item}
+                    {item.matched_menu_item}{" "}
+                    {item.quantity && `(${item.quantity})`}
                   </p>
-                  <p className="text-green-400 font-semibold">${item.price}</p>
+                  <p className="text-green-400 font-semibold">
+                    Unit Price: {item.price}
+                  </p>
                   {item.description && (
                     <p className="text-dark-300 text-sm mt-1">
                       {item.description}
@@ -80,21 +83,23 @@ const MenuResolution = ({ menuResolution, onClarificationResponse }) => {
             {clarification_needed.map((item, index) => (
               <div key={index} className="bg-dark-800/50 rounded-lg p-3">
                 <p className="text-white font-medium mb-2">
-                  {item.query || item.item}
+                  {item.requested_item} (Quantity: {item.quantity})
                 </p>
-                <p className="text-yellow-300 text-sm mb-3">{item.reason}</p>
-                {item.suggestions && item.suggestions.length > 0 && (
+                <p className="text-yellow-300 text-sm mb-3">
+                  {item.clarification_question}
+                </p>
+                {item.possible_matches && item.possible_matches.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {item.suggestions.map((suggestion, idx) => (
+                    {item.possible_matches.map((option, idx) => (
                       <button
                         key={idx}
                         onClick={() =>
                           onClarificationResponse &&
-                          onClarificationResponse(suggestion)
+                          onClarificationResponse(item, option)
                         }
                         className="bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-300 px-3 py-1 rounded-lg text-sm transition-colors"
                       >
-                        {suggestion.name} - ${suggestion.price}
+                        {option.menu_item} - {option.price}
                       </button>
                     ))}
                   </div>
@@ -118,7 +123,9 @@ const MenuResolution = ({ menuResolution, onClarificationResponse }) => {
           <div className="space-y-2">
             {not_found.map((item, index) => (
               <div key={index} className="bg-dark-800/50 rounded-lg p-3">
-                <p className="text-white">{item.query || item.item}</p>
+                <p className="text-white">
+                  {item.requested_item} {item.quantity && `(${item.quantity})`}
+                </p>
                 {item.reason && (
                   <p className="text-red-300 text-sm mt-1">{item.reason}</p>
                 )}

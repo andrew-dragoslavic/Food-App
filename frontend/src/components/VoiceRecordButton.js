@@ -1,15 +1,19 @@
 import React from "react";
-import { Mic, MicOff, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
+import { Mic, Square } from "lucide-react";
+import "../App.css"; // Import the CSS that contains the loader animation
 
 const VoiceRecordButton = ({
   isRecording,
   onStartRecording,
   onStopRecording,
-  disabled = false,
-  loading = false,
+  loading,
 }) => {
+  // Debug logging to see the states
+  console.log("VoiceRecordButton state:", { isRecording, loading });
+
   const handleClick = () => {
-    if (disabled || loading) return;
+    if (loading) return; // Prevent clicks while processing
 
     if (isRecording) {
       onStopRecording();
@@ -19,39 +23,65 @@ const VoiceRecordButton = ({
   };
 
   return (
-    <button
+    <motion.button
       onClick={handleClick}
-      disabled={disabled || loading}
+      disabled={loading}
       className={`
-        relative group h-20 w-20 rounded-full transition-all duration-300 ease-in-out
+        relative w-20 h-20 rounded-full flex items-center justify-center
+        transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-offset-2
         ${
           isRecording
-            ? "bg-gradient-to-r from-red-600 to-red-700 shadow-lg animate-pulse-slow"
-            : "bg-gradient-to-r from-primary-600 to-primary-700 hover:shadow-lg hover:scale-105"
+            ? "bg-red-500 hover:bg-red-600 focus:ring-red-300 shadow-lg shadow-red-500/25"
+            : loading
+            ? "bg-blue-500 cursor-not-allowed"
+            : "bg-blue-500 hover:bg-blue-600 focus:ring-blue-300 shadow-lg shadow-blue-500/25"
         }
-        ${
-          disabled || loading
-            ? "opacity-50 cursor-not-allowed"
-            : "cursor-pointer"
-        }
-        focus:outline-none focus:ring-4 focus:ring-primary-400/50
-        shadow-xl border border-dark-300/20
       `}
+      whileTap={!loading ? { scale: 0.95 } : {}}
+      whileHover={!loading ? { scale: 1.05 } : {}}
+      animate={{
+        scale: isRecording ? [1, 1.1, 1] : 1,
+      }}
+      transition={{
+        scale: {
+          duration: 1,
+          repeat: isRecording ? Infinity : 0,
+          ease: "easeInOut",
+        },
+      }}
     >
-      <div className="absolute inset-0 bg-white/10 rounded-full group-hover:bg-white/20 transition-colors duration-300" />
-
       {loading ? (
-        <Loader2 className="h-8 w-8 text-white animate-spin absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+        // Custom CSS loader - sized properly to fit inside the circle
+        <span 
+          className="loader" 
+          style={{ 
+            fontSize: '20px', // Much smaller than the default 45px
+            width: '20px',
+            height: '20px'
+          }}
+        ></span>
       ) : isRecording ? (
-        <MicOff className="h-8 w-8 text-white absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+        <Square className="w-8 h-8 text-white" fill="currentColor" />
       ) : (
-        <Mic className="h-8 w-8 text-white absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+        <Mic className="w-8 h-8 text-white" />
       )}
 
+      {/* Pulse ring for recording state */}
       {isRecording && (
-        <div className="absolute -inset-2 rounded-full border-2 border-red-400 animate-ping opacity-75" />
+        <motion.div
+          className="absolute inset-0 rounded-full border-2 border-red-300"
+          animate={{
+            scale: [1, 1.5, 1],
+            opacity: [0.7, 0, 0.7],
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
       )}
-    </button>
+    </motion.button>
   );
 };
 

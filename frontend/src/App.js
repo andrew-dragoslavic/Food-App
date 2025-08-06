@@ -13,6 +13,7 @@ import SoundWaveVisualizer from "./components/SoundWaveVisualizer";
 import TranscriptDisplay from "./components/TranscriptDisplay";
 import ErrorMessage from "./components/ErrorMessage";
 import MenuResolution from "./components/MenuResolutionSimple";
+import OrderAnimation from "./components/OrderAnimation";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -27,6 +28,8 @@ function App() {
   const [analyser, setAnalyser] = useState(null);
   const [showAuthForm, setShowAuthForm] = useState("login"); // "login" or "register"
   const [menuResolution, setMenuResolution] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [showOrderAnimation, setShowOrderAnimation] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -49,7 +52,10 @@ function App() {
     setTranscript("");
     setVoiceError("");
     setIsProcessing(false);
-    setMenuResolution(null); // Clear previous menu resolution results
+    // Don't clear menuResolution and sessionId if we're in a clarification flow
+    if (!sessionId) {
+      setMenuResolution(null);
+    }
 
     try {
       const audioStream = await navigator.mediaDevices.getUserMedia({
@@ -113,39 +119,113 @@ function App() {
     const formData = new FormData();
     formData.append("audio", audioBlob);
 
+    // Include sessionId if we have one (for clarification requests)
+    if (sessionId) {
+      formData.append("sessionId", sessionId);
+    }
+
     try {
+      console.log(
+        "Sending audio for transcription...",
+        sessionId ? `with sessionId: ${sessionId}` : "new request"
+      );
       const response = await fetch("/api/speech/transcribe", {
         method: "POST",
         body: formData,
       });
+
+      console.log("Transcription response status:", response.status);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const result = await response.json();
+      console.log("Transcription result:", result);
       setTranscript(result.text);
 
-      // If we have a transcript, process it for menu resolution
-      if (result.text) {
-        await processMenuResolution(result.text);
+      // Handle session management
+      if (result.sessionId) {
+        console.log("Setting sessionId:", result.sessionId);
+        setSessionId(result.sessionId);
+      } else {
+        console.log("Clearing sessionId - no more clarification needed");
+        setSessionId(null);
+      }
+
+      // The transcribe endpoint already returns menu resolution in the 'prediction' field
+      if (result.prediction) {
+        console.log(
+          "Setting menu resolution from prediction:",
+          result.prediction
+        );
+        setMenuResolution(result.prediction);
+      } else {
+        console.log("No prediction data received");
       }
     } catch (error) {
+      console.error("Speech processing error:", error);
       setVoiceError("Speech processing failed. Please try again.");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const processMenuResolution = async (transcript) => {
+  const placeOrder = async () => {
+    if (
+      !menuResolution ||
+      !menuResolution.confident_matches ||
+      menuResolution.confident_matches.length === 0
+    ) {
+      setVoiceError(
+        "No items ready to order. Please resolve any clarifications first."
+      );
+      return;
+    }
+
     try {
-      const response = await fetch("/api/process-order", {
+      console.log(
+        "Placing order with items:",
+        menuResolution.confident_matches
+      );
+      const response = await fetch("/api/speech/place-order", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({
+          confirmedItems: menuResolution.confident_matches,
+          restaurant: "McDonald's",
+        }),
       });
-      const menuResult = await response.json();
-      setMenuResolution(menuResult);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("Order placement result:", result);
+
+      if (result.success) {
+        // Show the beautiful animation instead of alert
+        setShowOrderAnimation(true);
+
+        // Clear the order state after animation completes
+        // (this will be handled by the animation's onComplete callback)
+      } else {
+        setVoiceError(result.message || "Failed to place order");
+      }
     } catch (error) {
-      console.error("Menu resolution failed:", error);
+      console.error("Order placement error:", error);
+      setVoiceError("Failed to place order. Please try again.");
     }
+  };
+
+  const handleOrderAnimationComplete = () => {
+    setShowOrderAnimation(false);
+    setMenuResolution(null);
+    setSessionId(null);
+    setTranscript("");
   };
 
   if (loading) {
@@ -252,42 +332,6 @@ function App() {
                     Try saying: "I want pizza from Joe's" or "Find me sushi
                     nearby"
                   </p>
-
-                  {/* Test button - remove in production */}
-                  <button
-                    onClick={() => {
-                      setMenuResolution({
-                        clarification_needed: [
-                          {
-                            clarification_question:
-                              "What kind of soda would you like?",
-                            requested_item: "soda",
-                            possible_matches: [
-                              {
-                                menu_item: "Coca-Cola® Zero Sugar",
-                                price: "$2.29",
-                              },
-                              { menu_item: "Coke®", price: "$2.29" },
-                              { price: "$2.29", menu_item: "Diet Coke®" },
-                              { menu_item: "Dr Pepper®", price: "$2.29" },
-                              { menu_item: "Fanta® Orange", price: "$2.29" },
-                              { menu_item: "Sprite®", price: "$2.29" },
-                            ],
-                            quantity: 2,
-                          },
-                        ],
-                        confident_matches: [
-                          { menu_item: "Big Mac", price: "$5.99", quantity: 1 },
-                        ],
-                        not_found: [
-                          { requested_item: "unicorn burger", quantity: 1 },
-                        ],
-                      });
-                    }}
-                    className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
-                  >
-                    Test Menu Resolution
-                  </button>
                 </div>
               </motion.div>
 
@@ -304,19 +348,107 @@ function App() {
               {/* Menu Resolution Results */}
               <AnimatePresence>
                 {menuResolution && (
-                  <MenuResolution
-                    menuResolution={menuResolution}
-                    onClarificationResponse={(item, option) => {
-                      // Handle clarification response
-                      console.log(
-                        "Selected option:",
-                        option,
-                        "for item:",
-                        item
-                      );
-                      // You can implement the logic to update the order here
-                    }}
-                  />
+                  <div className="space-y-6">
+                    <MenuResolution
+                      menuResolution={menuResolution}
+                      onClarificationResponse={(item, option) => {
+                        // Handle clarification response by making a voice request with the selected option
+                        console.log(
+                          "Selected option:",
+                          option,
+                          "for item:",
+                          item
+                        );
+
+                        // Create a synthetic clarification response
+                        const clarificationText = `For the ${item.requested_item}, I want ${option.menu_item}`;
+
+                        // Create a synthetic audio blob with the clarification text
+                        const utterance = new SpeechSynthesisUtterance(
+                          clarificationText
+                        );
+                        utterance.rate = 1;
+                        utterance.pitch = 1;
+                        utterance.volume = 0; // Silent
+
+                        // Convert text to audio blob and process it
+                        const processTextClarification = async () => {
+                          try {
+                            setIsProcessing(true);
+                            setTranscript(clarificationText);
+
+                            const formData = new FormData();
+                            formData.append("text", clarificationText);
+
+                            // Include sessionId for clarification requests
+                            if (sessionId) {
+                              formData.append("sessionId", sessionId);
+                            }
+
+                            const response = await fetch(
+                              "/api/speech/transcribe",
+                              {
+                                method: "POST",
+                                body: formData,
+                              }
+                            );
+
+                            if (!response.ok) {
+                              throw new Error(
+                                `HTTP error! status: ${response.status}`
+                              );
+                            }
+
+                            const result = await response.json();
+                            console.log("Clarification result:", result);
+
+                            // Handle session management
+                            if (result.sessionId) {
+                              setSessionId(result.sessionId);
+                            } else {
+                              setSessionId(null);
+                            }
+
+                            // Update menu resolution
+                            if (result.prediction) {
+                              setMenuResolution(result.prediction);
+                            }
+                          } catch (error) {
+                            console.error(
+                              "Clarification processing error:",
+                              error
+                            );
+                            setVoiceError(
+                              "Failed to process clarification. Please try again."
+                            );
+                          } finally {
+                            setIsProcessing(false);
+                          }
+                        };
+
+                        processTextClarification();
+                      }}
+                    />
+
+                    {/* Place Order Button - only show if there are confident matches and no clarification needed */}
+                    {menuResolution.confident_matches &&
+                      menuResolution.confident_matches.length > 0 &&
+                      (!menuResolution.clarification_needed ||
+                        menuResolution.clarification_needed.length === 0) && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="flex justify-center"
+                        >
+                          <button
+                            onClick={placeOrder}
+                            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg shadow-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
+                          >
+                            Place Order
+                          </button>
+                        </motion.div>
+                      )}
+                  </div>
                 )}
               </AnimatePresence>
 
@@ -332,6 +464,11 @@ function App() {
             </div>
           </div>
         </div>
+        {/* Order Animation Overlay */}
+        <OrderAnimation
+          isVisible={showOrderAnimation}
+          onComplete={handleOrderAnimationComplete}
+        />
       </div>
     );
   }

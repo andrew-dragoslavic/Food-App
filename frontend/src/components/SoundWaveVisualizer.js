@@ -34,12 +34,12 @@ const SoundWaveVisualizer = ({ isRecording, audioContext, analyser }) => {
       // Clear canvas with transparent background
       canvasContext.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Drawing parameters
-      const barCount = 32;
-      const barWidth = 6;
-      const barSpacing = 4;
+      // Drawing parameters - simplified to 4 bars
+      const barCount = 4;
+      const barWidth = 12;
+      const barSpacing = 8;
       const maxBarHeight = 60;
-      const baseBarHeight = 4;
+      const baseBarHeight = 8;
 
       // Calculate starting position to center the bars
       const totalWidth = barCount * barWidth + (barCount - 1) * barSpacing;
@@ -70,9 +70,12 @@ const SoundWaveVisualizer = ({ isRecording, audioContext, analyser }) => {
         gradient.addColorStop(0.6, "#8B5CF6"); // Purple
         gradient.addColorStop(1, "#EC4899"); // Pink
 
-        // Draw bar with simple rectangles to avoid browser compatibility issues
+        // Draw rounded bar
         canvasContext.fillStyle = gradient;
-        canvasContext.fillRect(x, y, barWidth, barHeight);
+        canvasContext.beginPath();
+        const radius = barWidth / 2; // Make it fully rounded
+        canvasContext.roundRect(x, y, barWidth, barHeight, radius);
+        canvasContext.fill();
       }
 
       animationRef.current = requestAnimationFrame(draw);
