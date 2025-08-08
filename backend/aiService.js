@@ -93,10 +93,10 @@ async function parseOrderText(text, restaurant = null, initialItems = null) {
     const request = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.1, // Add this section
+        temperature: 0.1,
         topP: 0.8,
         candidateCount: 1,
-        maxOutputTokens: 1000,
+        maxOutputTokens: 2000, // Increased from 1000
       },
       tools: [
         {
@@ -176,6 +176,11 @@ async function resolveMenuItems(
       null,
       2
     )}
+
+    CLARIFICATION QUESTIONS:
+    ${previousPrediction.clarification_needed
+      .map((item) => `${item.requested_item}: ${item.clarification_question}`)
+      .join("\n")}
 
     CUSTOMER CLARIFICATION:
     ${JSON.stringify(parsedOrder, null, 2)}
