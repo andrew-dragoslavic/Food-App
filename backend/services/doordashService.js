@@ -732,7 +732,10 @@ async function addSimpleItemToCart(page, orderItem) {
     const sizeOptions = await page.$$('input[type="radio"]');
     if (sizeOptions.length > 0) {
       const itemSize = orderItem.size || "Medium";
-      await selectItemSize(page, itemSize);
+      const sizeSelected = await selectItemSize(page, itemSize);
+      if (sizeSelected) {
+        await applySelectedSizeDelta(page, orderItem);
+      }
     }
 
     // Step 3: Adjust quantity if needed
@@ -1022,7 +1025,9 @@ async function placeOrder(confirmedItems) {
       orderedResults.push({
         item: item.matched_menu_item,
         quantity: item.quantity,
-        price: item.price,
+        price: item.finalPrice || item.price, // prefer computed variant price
+        size: item.selectedSize || null, // NEW: expose size
+        delta: item.sizeDelta != null ? item.sizeDelta : null, // NEW: expose delta number
         added: itemAdded,
         status: itemAdded ? "success" : "failed",
       });
