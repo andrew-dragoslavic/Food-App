@@ -212,33 +212,70 @@ function App() {
     }
   };
 
+  const buildItemKey = (item) => {
+    const base = (
+      item.matched_menu_item ||
+      item.menu_item ||
+      item.requested_item ||
+      ""
+    )
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, " ");
+    const size = (item.size || "").toLowerCase().trim();
+    return `${base}::${size}`;
+  };
+
   useEffect(() => {
     if (!menuResolution) {
       setEditableConfident([]);
       return;
     }
     const raw = menuResolution.confident_matches || [];
-    const normalized = raw.map((item, index) => {
-      const itemName = item.matched_menu_item || "unknown";
-      const slug = itemName
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9\s-]/g, "")
-        .replace(/\s+/g, "-")
-        .slice(0, 40);
-      const id = `${index}-${slug}`;
-      const quantity = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
-      return {
-        itemName,
-        id,
-        quantity,
-        matched_menu_item: item.matched_menu_item,
-        requested_item: item.requested_item,
-        price: item.price,
-        size: item.size,
-      };
+
+    setEditableConfident((prev) => {
+      const prevMap = new Map();
+      prev.forEach((p) => {
+        prevMap.set(buildItemKey(p), p);
+      });
+
+      const merged = raw.map((item) => {
+        const itemName =
+          item.matched_menu_item ||
+          item.menu_item ||
+          item.requested_item ||
+          "unknown";
+        const size = item.size || "";
+        const key = buildItemKey({
+          ...item,
+          matched_menu_item: itemName,
+          size,
+        });
+        const previous = prevMap.get(key);
+        const quantity = previous
+          ? previous.quantity
+          : Number(item.quantity) > 0
+          ? Number(item.quantity)
+          : 1;
+        const slug = key
+          .replace(/[^a-z0-9: -]/g, "")
+          .replace(/\s+/g, "-")
+          .slice(0, 50);
+        const id = slug;
+        return {
+          id,
+          key, // internal stable key (optional to keep)
+          itemName,
+          matched_menu_item: item.matched_menu_item,
+          requested_item: item.requested_item,
+          price: item.price,
+          size,
+          quantity,
+        };
+      });
+      return merged;
     });
-    setEditableConfident(normalized);
   }, [menuResolution]);
 
   const handleIncrement = (id) => {
@@ -478,8 +515,7 @@ function App() {
                           processTextClarification();
                         }}
                       />
-                      {menuResolution.confident_matches &&
-                        menuResolution.confident_matches.length > 0 &&
+                      {editableConfident.length > 0 &&
                         (!menuResolution.clarification_needed ||
                           menuResolution.clarification_needed.length === 0) && (
                           <motion.div
