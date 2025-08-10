@@ -850,6 +850,22 @@ async function testMenuScraping() {
   return menuItems;
 }
 
+async function goToCart(page) {
+  try {
+    const addToCartSelector = '[data-testid="OrderCartIconButton"]';
+    const checkoutSelector = '[data-testid="CheckoutButton"]';
+    await page.waitForSelector(addToCartSelector, { timeout: 2000 });
+    await page.click(addToCartSelector);
+    await page.waitForSelector(checkoutSelector, { timeout: 2000 });
+    await page.click(checkoutSelector);
+    console.log("ICON CLICKED");
+    return true;
+  } catch (error) {
+    console.log(`Error clicking: ${error}`);
+    return false;
+  }
+}
+
 async function selectItemSize(page, itemSize) {
   try {
     await page.waitForSelector('input[type="radio"]', { timeout: 3000 });
@@ -897,7 +913,7 @@ async function selectItemSize(page, itemSize) {
         console.log(
           `🔄 Fallback: selecting first option: ${sizeOptions[0].labelText}`
         );
-        await page.click(`#${targetOption.id.replace(/:/g, "\\:")}`);
+        await page.click(`#${sizeOptions[0].id.replace(/:/g, "\\:")}`);
         await new Promise((resolve) => setTimeout(resolve, 500));
         return true;
       }
@@ -906,6 +922,66 @@ async function selectItemSize(page, itemSize) {
   } catch (error) {
     console.log(`❌ Error selecting size: ${error.message}`);
     return false;
+  }
+}
+
+function parseCurrency(str) {
+  if (!str) return null;
+  const m = str.replace(/,/g, "").match(/[-+]?\$?\d+(\.\d{1,2})?/);
+  if (!m) return null;
+  return parseFloat(m[0].replace("$", ""));
+}
+
+function formatCurrency(n) {
+  if (n == null || isNaN(n)) return "";
+  return `$${n.toFixed(2)}`;
+}
+
+async function applySelectedSizeDelta(page, orderItem) {
+  try {
+    const selectedInfo = await page.evaluate(() => {
+      const checkedSize = document.querySelector('input[type="radio"]:checked');
+      if (!checked) return null;
+      const label = document.querySelector(`label[for="${checkedSize.id}"]`);
+      if (!label) return null;
+      const raw = label.innerText.trim();
+      const lines = raw.split("\n");
+      const sizeName = lines[0];
+      const deltaMatch = raw.match(/\+\$?\d+(\.\d{1,2})?/);
+      return {
+        sizeName,
+        rawLabel: raw,
+        deltaText: deltaMatch ? deltaMatch[0] : null,
+      };
+    });
+    if (!selectedInfo) {
+      console.log("ℹ️ No selected size radio; using base price only.");
+      return;
+    }
+
+    const basePriceNumber = parseCurrency((orderItem.price || "").toString());
+    const deltaNumber = selectedInfo.deltaText
+      ? parseCurrency(selectedInfo.deltaText)
+      : 0;
+
+    if (basePriceNumber != null) {
+      const finalPriceNumber = +(basePriceNumber + deltaNumber).toFixed(2);
+      orderItem.selectedSize = selectedInfo.sizeName;
+      orderItem.sizeDelta = deltaNumber;
+      orderItem.finalPriceNumber = finalPriceNumber;
+      orderItem.finalPrice = formatCurrency(finalPriceNumber);
+      console.log(
+        `💲 Final price = base ${formatCurrency(
+          basePriceNumber
+        )} + ${formatCurrency(deltaNumber)} (${selectedInfo.sizeName}) = ${
+          orderItem.finalPrice
+        }`
+      );
+    } else {
+      console.log("⚠️ Could not parse base price; skipping delta math.");
+    }
+  } catch (e) {
+    console.log(`⚠️ applySelectedSizeDelta failed: ${e.message}`);
   }
 }
 
@@ -965,6 +1041,7 @@ async function placeOrder(confirmedItems) {
   }
 
   const successCount = orderedResults.filter((r) => r.added).length;
+  await goToCart(targetPage);
   return {
     success: successCount === orderedResults.length,
     items: orderedResults,
