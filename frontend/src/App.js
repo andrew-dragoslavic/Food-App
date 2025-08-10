@@ -13,6 +13,7 @@ import SoundWaveVisualizer from "./components/SoundWaveVisualizer";
 import TranscriptDisplay from "./components/TranscriptDisplay";
 import ErrorMessage from "./components/ErrorMessage";
 import MenuResolution from "./components/MenuResolutionSimple";
+import ConfirmedItemsReview from "./components/ConfirmedItemsReview";
 import OrderAnimation from "./components/OrderAnimation";
 
 function App() {
@@ -30,6 +31,8 @@ function App() {
   const [menuResolution, setMenuResolution] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [showOrderAnimation, setShowOrderAnimation] = useState(false);
+  const [viewMode, setViewMode] = useState("input"); // input | review
+  const [reviewItems, setReviewItems] = useState([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -171,53 +174,40 @@ function App() {
     }
   };
 
-  const placeOrder = async () => {
+  const confirmItems = async () => {
     if (
       !menuResolution ||
       !menuResolution.confident_matches ||
-      menuResolution.confident_matches.length === 0
+      menuResolution.confident_matches.length === 0 ||
+      (menuResolution.clarification_needed &&
+        menuResolution.clarification_needed.length > 0)
     ) {
-      setVoiceError(
-        "No items ready to order. Please resolve any clarifications first."
-      );
+      setVoiceError("Cannot confirm yet. Resolve all clarifications first.");
       return;
     }
-
     try {
-      console.log(
-        "Placing order with items:",
-        menuResolution.confident_matches
-      );
-      const response = await fetch("/api/speech/place-order", {
+      setIsProcessing(true);
+      const response = await fetch("/api/speech/confirm-items", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           confirmedItems: menuResolution.confident_matches,
           restaurant: "McDonald's",
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
-      console.log("Order placement result:", result);
-
-      if (result.success) {
-        // Show the beautiful animation instead of alert
-        setShowOrderAnimation(true);
-
-        // Clear the order state after animation completes
-        // (this will be handled by the animation's onComplete callback)
-      } else {
-        setVoiceError(result.message || "Failed to place order");
+      if (!result.success) {
+        setVoiceError(result.message || "Confirm failed");
+        return;
       }
-    } catch (error) {
-      console.error("Order placement error:", error);
-      setVoiceError("Failed to place order. Please try again.");
+      setReviewItems(result.orderedResults || result.items || []);
+      setViewMode("review");
+    } catch (e) {
+      console.error(e);
+      setVoiceError("Failed to confirm items.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -346,111 +336,124 @@ function App() {
               </AnimatePresence>
 
               {/* Menu Resolution Results */}
-              <AnimatePresence>
-                {menuResolution && (
-                  <div className="space-y-6">
-                    <MenuResolution
-                      menuResolution={menuResolution}
-                      onClarificationResponse={(item, option) => {
-                        // Handle clarification response by making a voice request with the selected option
-                        console.log(
-                          "Selected option:",
-                          option,
-                          "for item:",
-                          item
-                        );
+              {viewMode === "input" && (
+                <AnimatePresence>
+                  {menuResolution && (
+                    <div className="space-y-6">
+                      <MenuResolution
+                        menuResolution={menuResolution}
+                        onClarificationResponse={(item, option) => {
+                          // Handle clarification response by making a voice request with the selected option
+                          console.log(
+                            "Selected option:",
+                            option,
+                            "for item:",
+                            item
+                          );
 
-                        // Create a synthetic clarification response
-                        const clarificationText = `For the ${item.requested_item}, I want ${option.menu_item}`;
+                          // Create a synthetic clarification response
+                          const clarificationText = `For the ${item.requested_item}, I want ${option.menu_item}`;
 
-                        // Create a synthetic audio blob with the clarification text
-                        const utterance = new SpeechSynthesisUtterance(
-                          clarificationText
-                        );
-                        utterance.rate = 1;
-                        utterance.pitch = 1;
-                        utterance.volume = 0; // Silent
+                          // Create a synthetic audio blob with the clarification text
+                          const utterance = new SpeechSynthesisUtterance(
+                            clarificationText
+                          );
+                          utterance.rate = 1;
+                          utterance.pitch = 1;
+                          utterance.volume = 0; // Silent
 
-                        // Convert text to audio blob and process it
-                        const processTextClarification = async () => {
-                          try {
-                            setIsProcessing(true);
-                            setTranscript(clarificationText);
+                          // Convert text to audio blob and process it
+                          const processTextClarification = async () => {
+                            try {
+                              setIsProcessing(true);
+                              setTranscript(clarificationText);
 
-                            const formData = new FormData();
-                            formData.append("text", clarificationText);
+                              const formData = new FormData();
+                              formData.append("text", clarificationText);
 
-                            // Include sessionId for clarification requests
-                            if (sessionId) {
-                              formData.append("sessionId", sessionId);
-                            }
-
-                            const response = await fetch(
-                              "/api/speech/transcribe",
-                              {
-                                method: "POST",
-                                body: formData,
+                              // Include sessionId for clarification requests
+                              if (sessionId) {
+                                formData.append("sessionId", sessionId);
                               }
-                            );
 
-                            if (!response.ok) {
-                              throw new Error(
-                                `HTTP error! status: ${response.status}`
+                              const response = await fetch(
+                                "/api/speech/transcribe",
+                                {
+                                  method: "POST",
+                                  body: formData,
+                                }
                               );
+
+                              if (!response.ok) {
+                                throw new Error(
+                                  `HTTP error! status: ${response.status}`
+                                );
+                              }
+
+                              const result = await response.json();
+                              console.log("Clarification result:", result);
+
+                              // Handle session management
+                              if (result.sessionId) {
+                                setSessionId(result.sessionId);
+                              } else {
+                                setSessionId(null);
+                              }
+
+                              // Update menu resolution
+                              if (result.prediction) {
+                                setMenuResolution(result.prediction);
+                              }
+                            } catch (error) {
+                              console.error(
+                                "Clarification processing error:",
+                                error
+                              );
+                              setVoiceError(
+                                "Failed to process clarification. Please try again."
+                              );
+                            } finally {
+                              setIsProcessing(false);
                             }
+                          };
 
-                            const result = await response.json();
-                            console.log("Clarification result:", result);
-
-                            // Handle session management
-                            if (result.sessionId) {
-                              setSessionId(result.sessionId);
-                            } else {
-                              setSessionId(null);
-                            }
-
-                            // Update menu resolution
-                            if (result.prediction) {
-                              setMenuResolution(result.prediction);
-                            }
-                          } catch (error) {
-                            console.error(
-                              "Clarification processing error:",
-                              error
-                            );
-                            setVoiceError(
-                              "Failed to process clarification. Please try again."
-                            );
-                          } finally {
-                            setIsProcessing(false);
-                          }
-                        };
-
-                        processTextClarification();
-                      }}
-                    />
-
-                    {/* Place Order Button - only show if there are confident matches and no clarification needed */}
-                    {menuResolution.confident_matches &&
-                      menuResolution.confident_matches.length > 0 &&
-                      (!menuResolution.clarification_needed ||
-                        menuResolution.clarification_needed.length === 0) && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="flex justify-center"
-                        >
-                          <button
-                            onClick={placeOrder}
-                            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg shadow-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
+                          processTextClarification();
+                        }}
+                      />
+                      {menuResolution.confident_matches &&
+                        menuResolution.confident_matches.length > 0 &&
+                        (!menuResolution.clarification_needed ||
+                          menuResolution.clarification_needed.length === 0) && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex justify-center"
                           >
-                            Place Order
-                          </button>
-                        </motion.div>
-                      )}
-                  </div>
-                )}
-              </AnimatePresence>
+                            <button
+                              onClick={confirmItems}
+                              disabled={isProcessing}
+                              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-3 px-8 rounded-lg shadow-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                            >
+                              {isProcessing ? "Confirming..." : "Confirm Items"}
+                            </button>
+                          </motion.div>
+                        )}
+                    </div>
+                  )}
+                </AnimatePresence>
+              )}
+              {viewMode === "review" && (
+                <motion.div
+                  initial={{ opacity: 0, y: 40 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="pb-24"
+                >
+                  <ConfirmedItemsReview
+                    items={reviewItems}
+                    onBack={() => setViewMode("input")}
+                  />
+                </motion.div>
+              )}
 
               {/* Error Message */}
               <AnimatePresence>

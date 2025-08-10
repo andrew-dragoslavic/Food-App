@@ -200,7 +200,8 @@ router.post("/transcribe", async (req, res) => {
   }
 });
 
-router.post("/place-order", async (req, res) => {
+// Renamed from /place-order to /confirm-items: performs item selection & pricing (adds to cart) but treated as confirmation step
+router.post("/confirm-items", async (req, res) => {
   try {
     const { confirmedItems, restaurant } = req.body;
 

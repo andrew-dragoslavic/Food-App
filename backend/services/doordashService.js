@@ -944,17 +944,21 @@ async function applySelectedSizeDelta(page, orderItem) {
   try {
     const selectedInfo = await page.evaluate(() => {
       const checkedSize = document.querySelector('input[type="radio"]:checked');
-      if (!checked) return null;
+      if (!checkedSize) return null;
       const label = document.querySelector(`label[for="${checkedSize.id}"]`);
       if (!label) return null;
       const raw = label.innerText.trim();
       const lines = raw.split("\n");
       const sizeName = lines[0];
-      const deltaMatch = raw.match(/\+\$?\d+(\.\d{1,2})?/);
+      const deltaMatch = raw.match(/\+\$?\d+(\.\d{1,2})?/); // +$0.40 style
+      const fullPriceMatch = !deltaMatch
+        ? raw.match(/\$\d+(\.\d{1,2})?/) // a standalone $12.49 style inside label
+        : null;
       return {
         sizeName,
         rawLabel: raw,
         deltaText: deltaMatch ? deltaMatch[0] : null,
+        fullPriceText: fullPriceMatch ? fullPriceMatch[0] : null,
       };
     });
     if (!selectedInfo) {
@@ -963,9 +967,30 @@ async function applySelectedSizeDelta(page, orderItem) {
     }
 
     const basePriceNumber = parseCurrency((orderItem.price || "").toString());
-    const deltaNumber = selectedInfo.deltaText
+    let deltaNumber = selectedInfo.deltaText
       ? parseCurrency(selectedInfo.deltaText)
       : 0;
+
+    // Fallback: if no +$ delta token, try to read displayed price or full price token from label
+    if (!selectedInfo.deltaText) {
+      // Attempt to read price currently shown in modal (often updates after size selection)
+      let displayedPriceStr = await page
+        .$eval('[data-testid="StoreMenuItemPrice"]', (el) => el.innerText)
+        .catch(() => null);
+      const displayedPriceNum = parseCurrency(displayedPriceStr);
+      if (displayedPriceNum != null && basePriceNumber != null) {
+        const computed = +(displayedPriceNum - basePriceNumber).toFixed(2);
+        if (!isNaN(computed) && computed >= 0) {
+          deltaNumber = computed;
+        }
+      } else if (selectedInfo.fullPriceText && basePriceNumber != null) {
+        const fullFromLabel = parseCurrency(selectedInfo.fullPriceText);
+        if (fullFromLabel != null) {
+          const computed = +(fullFromLabel - basePriceNumber).toFixed(2);
+            if (!isNaN(computed) && computed >= 0) deltaNumber = computed;
+        }
+      }
+    }
 
     if (basePriceNumber != null) {
       const finalPriceNumber = +(basePriceNumber + deltaNumber).toFixed(2);
