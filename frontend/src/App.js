@@ -12,7 +12,7 @@ import VoiceRecordButton from "./components/VoiceRecordButton";
 import SoundWaveVisualizer from "./components/SoundWaveVisualizer";
 import TranscriptDisplay from "./components/TranscriptDisplay";
 import ErrorMessage from "./components/ErrorMessage";
-import MenuResolution from "./components/MenuResolutionSimple";
+import MenuResolution from "./components/MenuResolution";
 import ConfirmedItemsReview from "./components/ConfirmedItemsReview";
 import OrderAnimation from "./components/OrderAnimation";
 
@@ -33,6 +33,7 @@ function App() {
   const [showOrderAnimation, setShowOrderAnimation] = useState(false);
   const [viewMode, setViewMode] = useState("input"); // input | review
   const [reviewItems, setReviewItems] = useState([]);
+  const [editableConfident, setEditableConfident] = useState([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -191,7 +192,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          confirmedItems: menuResolution.confident_matches,
+          confirmedItems: editableConfident,
           restaurant: "McDonald's",
         }),
       });
@@ -209,6 +210,57 @@ function App() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  useEffect(() => {
+    if (!menuResolution) {
+      setEditableConfident([]);
+      return;
+    }
+    const raw = menuResolution.confident_matches || [];
+    const normalized = raw.map((item, index) => {
+      const itemName = item.matched_menu_item || "unknown";
+      const slug = itemName
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .slice(0, 40);
+      const id = `${index}-${slug}`;
+      const quantity = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
+      return {
+        itemName,
+        id,
+        quantity,
+        matched_menu_item: item.matched_menu_item,
+        requested_item: item.requested_item,
+        price: item.price,
+        size: item.size,
+      };
+    });
+    setEditableConfident(normalized);
+  }, [menuResolution]);
+
+  const handleIncrement = (id) => {
+    setEditableConfident((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        return { ...item, quantity: item.quantity + 1 };
+      })
+    );
+  };
+
+  const handleDecrement = (id) => {
+    setEditableConfident((prev) =>
+      prev
+        .map((item) => {
+          if (item.id !== id) return item;
+          if (item.quantity > 1)
+            return { ...item, quantity: item.quantity - 1 };
+          return null; // mark for removal
+        })
+        .filter((item) => item !== null)
+    );
   };
 
   const handleOrderAnimationComplete = () => {
@@ -341,7 +393,13 @@ function App() {
                   {menuResolution && (
                     <div className="space-y-6">
                       <MenuResolution
-                        menuResolution={menuResolution}
+                        confidentItems={editableConfident}
+                        clarificationNeeded={
+                          menuResolution?.clarification_needed || []
+                        }
+                        notFound={menuResolution?.not_found || []}
+                        onIncrement={handleIncrement}
+                        onDecrement={handleDecrement}
                         onClarificationResponse={(item, option) => {
                           // Handle clarification response by making a voice request with the selected option
                           console.log(

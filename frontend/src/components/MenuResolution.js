@@ -1,20 +1,29 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { CheckCircle, HelpCircle, XCircle, ShoppingCart } from "lucide-react";
+import {
+  CheckCircle,
+  HelpCircle,
+  XCircle,
+  Trash2,
+  Minus,
+  Plus,
+} from "lucide-react";
 
-const MenuResolution = ({ menuResolution, onClarificationResponse }) => {
-  if (!menuResolution) return null;
+const sectionBase =
+  "backdrop-blur-sm rounded-2xl p-6 border shadow-sm transition-colors";
 
-  const {
-    confident_matches = [],
-    clarification_needed = [],
-    not_found = [],
-  } = menuResolution;
-
+const MenuResolution = ({
+  confidentItems = [],
+  clarificationNeeded = [],
+  notFound = [],
+  onIncrement,
+  onDecrement,
+  onClarificationResponse,
+}) => {
   const hasResults =
-    confident_matches.length > 0 ||
-    clarification_needed.length > 0 ||
-    not_found.length > 0;
+    confidentItems.length > 0 ||
+    clarificationNeeded.length > 0 ||
+    notFound.length > 0;
 
   if (!hasResults) return null;
 
@@ -22,57 +31,82 @@ const MenuResolution = ({ menuResolution, onClarificationResponse }) => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-3xl mx-auto space-y-6"
+      className="w-full max-w-3xl mx-auto space-y-8"
     >
-      {/* Confident Matches */}
-      {confident_matches.length > 0 && (
-        <div className="bg-dark-800/90 backdrop-blur-sm rounded-2xl p-6 border border-dark-600/20">
+      {/* CONFIDENT / REVIEW ITEMS (Green theme) */}
+      {confidentItems.length > 0 && (
+        <div
+          className={`${sectionBase} bg-emerald-600/10 border-emerald-500/30`}
+        >
           <div className="flex items-center gap-3 mb-4">
-            <CheckCircle className="h-5 w-5 text-green-500" />
-            <h3 className="text-lg font-semibold text-dark-100">
-              Items Added to Cart
+            <CheckCircle className="h-5 w-5 text-emerald-400" />
+            <h3 className="text-lg font-semibold text-emerald-200">
+              Ready Items
             </h3>
           </div>
           <div className="space-y-3">
-            {confident_matches.map((item, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 bg-dark-700/50 rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded text-sm font-medium">
-                    {item.quantity}x
-                  </span>
-                  <span className="text-dark-100 font-medium">
-                    {item.menu_item}
-                  </span>
+            {confidentItems.map((item) => {
+              const qty = item.quantity;
+              const MinusOrTrash = qty === 1 ? Trash2 : Minus;
+              const minusAria =
+                qty === 1
+                  ? `Remove ${item.itemName}`
+                  : `Decrease quantity for ${item.itemName}`;
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-400/20"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-emerald-100 font-medium">
+                      {item.itemName}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label={minusAria}
+                      onClick={() => onDecrement && onDecrement(item.id)}
+                      className="w-8 h-8 flex items-center justify-center rounded-md bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 transition"
+                    >
+                      <MinusOrTrash className="w-4 h-4" />
+                    </button>
+                    <span className="min-w-[2ch] text-center text-emerald-50 font-semibold">
+                      {qty}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Increase quantity for ${item.itemName}`}
+                      onClick={() => onIncrement && onIncrement(item.id)}
+                      className="w-8 h-8 flex items-center justify-center rounded-md bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 transition"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <span className="text-dark-300 font-semibold">
-                  {item.price}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Clarification Needed */}
-      {clarification_needed.length > 0 && (
-        <div className="bg-dark-800/90 backdrop-blur-sm rounded-2xl p-6 border border-dark-600/20">
+      {/* CLARIFICATION NEEDED (Yellow theme) */}
+      {clarificationNeeded.length > 0 && (
+        <div className={`${sectionBase} bg-amber-600/10 border-amber-500/30`}>
           <div className="flex items-center gap-3 mb-4">
-            <HelpCircle className="h-5 w-5 text-yellow-500" />
-            <h3 className="text-lg font-semibold text-dark-100">
-              Need More Details
+            <HelpCircle className="h-5 w-5 text-amber-400" />
+            <h3 className="text-lg font-semibold text-amber-200">
+              Need Clarification
             </h3>
           </div>
           <div className="space-y-6">
-            {clarification_needed.map((item, index) => (
-              <div key={index} className="space-y-4">
+            {clarificationNeeded.map((item, idx) => (
+              <div key={idx} className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <span className="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded text-sm font-medium">
-                    {item.quantity}x
+                  <span className="bg-amber-500/20 text-amber-300 px-2 py-1 rounded text-sm font-medium">
+                    {item.quantity || 1}x
                   </span>
-                  <p className="text-dark-200 font-medium">
+                  <p className="text-amber-100 font-medium">
                     {item.clarification_question}
                   </p>
                 </div>
@@ -84,10 +118,10 @@ const MenuResolution = ({ menuResolution, onClarificationResponse }) => {
                         onClarificationResponse &&
                         onClarificationResponse(item, option)
                       }
-                      className="flex items-center justify-between p-3 bg-dark-700/50 hover:bg-dark-600/50 rounded-lg transition-colors text-left"
+                      className="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/20 transition-colors text-left"
                     >
-                      <span className="text-dark-100">{option.menu_item}</span>
-                      <span className="text-dark-300 font-medium">
+                      <span className="text-amber-100">{option.menu_item}</span>
+                      <span className="text-amber-300 font-medium">
                         {option.price}
                       </span>
                     </button>
@@ -99,44 +133,31 @@ const MenuResolution = ({ menuResolution, onClarificationResponse }) => {
         </div>
       )}
 
-      {/* Not Found */}
-      {not_found.length > 0 && (
-        <div className="bg-dark-800/90 backdrop-blur-sm rounded-2xl p-6 border border-dark-600/20">
+      {/* NOT FOUND (Red theme) */}
+      {notFound.length > 0 && (
+        <div className={`${sectionBase} bg-rose-700/10 border-rose-600/30`}>
           <div className="flex items-center gap-3 mb-4">
-            <XCircle className="h-5 w-5 text-red-500" />
-            <h3 className="text-lg font-semibold text-dark-100">
-              Items Not Available
+            <XCircle className="h-5 w-5 text-rose-400" />
+            <h3 className="text-lg font-semibold text-rose-200">
+              Not Found / Unavailable
             </h3>
           </div>
           <div className="space-y-2">
-            {not_found.map((item, index) => (
+            {notFound.map((item, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between p-3 bg-red-900/20 border border-red-700/30 rounded-lg"
+                className="flex items-center justify-between p-3 rounded-lg bg-rose-500/10 border border-rose-500/30"
               >
                 <div className="flex items-center gap-3">
-                  <span className="bg-red-500/20 text-red-400 px-2 py-1 rounded text-sm font-medium">
-                    {item.quantity}x
+                  <span className="bg-rose-500/25 text-rose-300 px-2 py-1 rounded text-sm font-medium">
+                    {item.quantity || 1}x
                   </span>
-                  <span className="text-red-200">{item.requested_item}</span>
+                  <span className="text-rose-100">{item.requested_item}</span>
                 </div>
-                <span className="text-red-400 text-sm">Not available</span>
+                <span className="text-rose-300 text-sm">Unavailable</span>
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Action Buttons */}
-      {(confident_matches.length > 0 || clarification_needed.length > 0) && (
-        <div className="flex gap-3 justify-center">
-          <button className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-xl font-semibold transition-colors">
-            <ShoppingCart className="h-5 w-5" />
-            Add to Cart
-          </button>
-          <button className="bg-dark-600 hover:bg-dark-500 text-dark-100 px-6 py-3 rounded-xl font-semibold transition-colors">
-            Try Again
-          </button>
         </div>
       )}
     </motion.div>

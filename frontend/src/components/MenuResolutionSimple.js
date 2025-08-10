@@ -1,7 +1,11 @@
 import React from "react";
 import { CheckCircle, HelpCircle, XCircle } from "lucide-react";
 
-const MenuResolution = ({ menuResolution, onClarificationResponse }) => {
+const MenuResolution = ({
+  menuResolution,
+  onClarificationResponse,
+  editableConfident,
+}) => {
   if (!menuResolution) return null;
 
   const {
