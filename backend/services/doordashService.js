@@ -987,7 +987,7 @@ async function applySelectedSizeDelta(page, orderItem) {
         const fullFromLabel = parseCurrency(selectedInfo.fullPriceText);
         if (fullFromLabel != null) {
           const computed = +(fullFromLabel - basePriceNumber).toFixed(2);
-            if (!isNaN(computed) && computed >= 0) deltaNumber = computed;
+          if (!isNaN(computed) && computed >= 0) deltaNumber = computed;
         }
       }
     }
