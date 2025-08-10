@@ -781,10 +781,10 @@ function getRestaurantPage() {
   }
 }
 
-async function testMenuScraping() {
+async function scrapeMenu(restaurant) {
   console.log("=== STARTING RESTAURANT SELECTION ===");
 
-  const restaurantResult = await findAndSelectRestaurant("McDonald's");
+  const restaurantResult = await findAndSelectRestaurant(restaurant);
 
   if (!restaurantResult.success) {
     console.log("❌ Failed to select restaurant:", restaurantResult.message);
@@ -795,8 +795,6 @@ async function testMenuScraping() {
   restaurantPage = restaurantResult.newPage;
 
   // Debug screenshots
-  console.log("📸 Taking screenshot of restaurant page...");
-  await restaurantPage.screenshot({ path: "restaurant-page-loaded.png" });
 
   // Extended wait for initial page load
   console.log("⏳ Waiting for initial page load (8 seconds)...");
@@ -1086,7 +1084,7 @@ module.exports = {
   initialize,
   getDoorDashPage,
   findAndSelectRestaurant,
-  testMenuScraping,
+  scrapeMenu,
   clickAddToCartButton,
   asjustQuantity,
   findAndClickMenuItem,

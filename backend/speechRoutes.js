@@ -3,7 +3,7 @@ const speech = require("@google-cloud/speech");
 const { parseOrderText, resolveMenuItems } = require("./aiService.js");
 const {
   findAndSelectRestaurant,
-  testMenuScraping,
+  scrapeMenu,
   placeOrder,
   getDoorDashPage,
 } = require("./services/doordashService.js");
@@ -137,7 +137,7 @@ router.post("/transcribe", async (req, res) => {
       } else {
         // Session not found, treat as new request
         parsedOrder = await parseOrderText(transcription);
-        menuItems = await testMenuScraping();
+        menuItems = await scrapeMenu(parseOrder.restaurant);
         prediction = await resolveMenuItems(parsedOrder, menuItems);
         clarificationResult = clarificationService(prediction);
 
@@ -159,7 +159,7 @@ router.post("/transcribe", async (req, res) => {
     } else {
       // New request - no session ID provided
       parsedOrder = await parseOrderText(transcription);
-      menuItems = await testMenuScraping();
+      menuItems = await scrapeMenu(parsedOrder.restaurant);
       prediction = await resolveMenuItems(parsedOrder, menuItems);
 
       // Check if clarification is needed
